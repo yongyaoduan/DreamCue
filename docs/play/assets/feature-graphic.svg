@@ -1,0 +1,40 @@
+<svg width="1024" height="500" viewBox="0 0 1024 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="96" y1="60" x2="930" y2="446" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0E4D4"/>
+      <stop offset="1" stop-color="#FAF4EA"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="110" y1="80" x2="914" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF9F0"/>
+      <stop offset="1" stop-color="#FFFDF8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="500" rx="32" fill="url(#bg)"/>
+  <circle cx="892" cy="116" r="92" fill="#214E4D" fill-opacity="0.10"/>
+  <circle cx="128" cy="402" r="112" fill="#C4694E" fill-opacity="0.10"/>
+  <rect x="76" y="58" width="872" height="384" rx="36" fill="url(#panel)" stroke="#DCCFBE" stroke-width="2"/>
+
+  <rect x="128" y="118" width="146" height="146" rx="32" fill="#214E4D"/>
+  <path d="M170 161H232V177H170V161ZM170 194H232V210H170V194ZM170 227H215V243H170V227Z" fill="#FFF8F0"/>
+  <path d="M217 225L232 240L258 206" stroke="#C4694E" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="318" y="171" fill="#214E4D" font-size="54" font-family="Helvetica, Arial, sans-serif" font-weight="700">DreamCue</text>
+  <text x="318" y="216" fill="#5A6662" font-size="24" font-family="Helvetica, Arial, sans-serif">Write one short memo. Review it every day.</text>
+  <text x="318" y="255" fill="#5A6662" font-size="24" font-family="Helvetica, Arial, sans-serif">Clear it, reopen it, or delete it forever.</text>
+
+  <rect x="320" y="304" width="148" height="42" rx="21" fill="#214E4D"/>
+  <text x="394" y="331" text-anchor="middle" fill="#FFF9F0" font-size="18" font-family="Helvetica, Arial, sans-serif">Current</text>
+
+  <rect x="484" y="304" width="148" height="42" rx="21" fill="#F0E6D7"/>
+  <text x="558" y="331" text-anchor="middle" fill="#214E4D" font-size="18" font-family="Helvetica, Arial, sans-serif">Search</text>
+
+  <rect x="648" y="304" width="148" height="42" rx="21" fill="#F0E6D7"/>
+  <text x="722" y="331" text-anchor="middle" fill="#214E4D" font-size="18" font-family="Helvetica, Arial, sans-serif">History</text>
+
+  <rect x="320" y="364" width="206" height="34" rx="17" fill="#E8DED0"/>
+  <text x="423" y="386" text-anchor="middle" fill="#214E4D" font-size="16" font-family="Helvetica, Arial, sans-serif">Exact reminders</text>
+
+  <rect x="540" y="364" width="206" height="34" rx="17" fill="#E8DED0"/>
+  <text x="643" y="386" text-anchor="middle" fill="#214E4D" font-size="16" font-family="Helvetica, Arial, sans-serif">Local-first privacy</text>
+</svg>

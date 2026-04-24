@@ -1,0 +1,16 @@
+[package]
+name = "memo-android-ffi"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow.workspace = true
+jni.workspace = true
+memo-core = { path = "../memo-core" }
+serde.workspace = true
+serde_json.workspace = true

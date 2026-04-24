@@ -8,6 +8,7 @@ import app.dreamcue.model.ReminderTime
 import app.dreamcue.model.ReviewSnapshot
 import app.dreamcue.model.SearchResult
 import java.io.File
+import org.json.JSONObject.NULL
 import org.json.JSONObject
 
 class DreamCueRepository(context: Context) {
@@ -69,6 +70,15 @@ class DreamCueRepository(context: Context) {
 
     fun deleteMemo(memoId: String) {
         parseUnit(DreamCueBridge.nativeDeleteMemo(requireHandle(), memoId))
+    }
+
+    fun applyRemoteMemo(memo: Memo): Memo = parseObject(
+        DreamCueBridge.nativeApplyRemoteMemo(requireHandle(), memo.toJson().toString()),
+        Memo::fromJson,
+    )
+
+    fun deleteRemoteMemo(memoId: String) {
+        parseUnit(DreamCueBridge.nativeDeleteRemoteMemo(requireHandle(), memoId))
     }
 
     fun listActiveMemos(): List<Memo> = parseArray(
@@ -150,4 +160,16 @@ class DreamCueRepository(context: Context) {
         private const val KEY_HOUR = "reminder_hour"
         private const val KEY_MINUTE = "reminder_minute"
     }
+}
+
+private fun Memo.toJson(): JSONObject {
+    return JSONObject()
+        .put("id", id)
+        .put("content", content)
+        .put("status", if (isActive) "active" else "cleared")
+        .put("created_at_ms", createdAtMs)
+        .put("updated_at_ms", updatedAtMs)
+        .put("cleared_at_ms", clearedAtMs ?: NULL)
+        .put("reminder_count", reminderCount)
+        .put("last_reviewed_at_ms", lastReviewedAtMs ?: NULL)
 }

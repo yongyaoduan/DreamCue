@@ -10,7 +10,7 @@ Write a short memo, review it daily, clear it when done, or keep it active.
 
 ## Full Description
 
-DreamCue is a local memo reminder App for short notes that should not be forgotten.
+DreamCue is a memo reminder App for short notes that should not be forgotten.
 
 It is designed for one sentence at a time. Add a memo, keep the original text, and review it later. Each memo records `created_at_ms`, `updated_at_ms`, and `cleared_at_ms`.
 
@@ -24,7 +24,8 @@ Main features:
 - Reopen a cleared memo by setting status to `active`
 - Search current and historical memos through `dreamcue-core`
 - Delete a memo and its event history from `memo_events`
-- Keep memo data on the device in `dreamcue.sqlite3`
+- Keep memo data locally in `dreamcue.sqlite3`
+- Sync memo data across signed-in devices with Firebase Auth and Firestore
 
 Good use cases:
 
@@ -32,7 +33,7 @@ Good use cases:
 - A small task that needs daily review
 - A thought that should stay visible until it is handled
 
-DreamCue uses `POST_NOTIFICATIONS` for reminders and `SCHEDULE_EXACT_ALARM` for fixed-time scheduling. Privacy policy text is maintained in `docs/play/privacy-policy.md`.
+DreamCue uses `POST_NOTIFICATIONS` for reminders, `SCHEDULE_EXACT_ALARM` for fixed-time scheduling, and `INTERNET` for optional sync. Privacy policy text is maintained in `docs/play/privacy-policy.md`.
 
 ## Keywords
 
@@ -40,6 +41,6 @@ DreamCue uses `POST_NOTIFICATIONS` for reminders and `SCHEDULE_EXACT_ALARM` for 
 - reminder
 - daily reminder
 - note
-- local notes
+- synced notes
 - history
 - short memo

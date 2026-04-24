@@ -4,11 +4,14 @@
 
 DreamCue handles one main flow: write a short memo, review it every day, then decide whether it should stay active or move to history.
 
-The project is split into three layers:
+The Android project is split into four layers:
 
 1. `Rust core`
 2. `JNI bridge`
 3. `Android shell`
+4. `Firebase sync`
+
+The macOS project is a native `SwiftUI` shell with local JSON storage and Firebase REST sync.
 
 ## Rust Core
 
@@ -24,6 +27,8 @@ Responsibilities:
 - Generate the daily review queue
 - Write memo events
 - Search memos
+- Apply remote memo changes
+- Delete remote memo tombstones
 
 ### Tables
 
@@ -90,8 +95,47 @@ Responsibilities:
 - Daily reminder scheduling
 - Reminder rebuild after device boot
 - Notification tap handling
+- Firebase Auth email/password sign-in
+- Firestore realtime listener
+- Firestore upload after local mutations
+
+## Firebase Sync
+
+Key files:
+
+- [android/app/src/main/java/app/dreamcue/sync/FirebaseSyncCoordinator.kt](../android/app/src/main/java/app/dreamcue/sync/FirebaseSyncCoordinator.kt)
+- [android/app/src/main/java/app/dreamcue/sync/FirebaseTenantPaths.kt](../android/app/src/main/java/app/dreamcue/sync/FirebaseTenantPaths.kt)
+- [android/app/src/main/java/app/dreamcue/sync/RemoteMemoDocument.kt](../android/app/src/main/java/app/dreamcue/sync/RemoteMemoDocument.kt)
+- [macos/DreamCueMac/FirebaseRestSyncService.swift](../macos/DreamCueMac/FirebaseRestSyncService.swift)
+
+Tenant isolation is based on Firebase Auth user IDs. Remote memo documents live under:
+
+```text
+users/{uid}/memos/{memoId}
+```
+
+The Android client uses Firestore snapshot listeners for realtime updates. The macOS client uses Firebase Auth and Firestore REST endpoints with periodic polling.
+
+The client-side conflict rule is last-write-wins on `updated_at_ms`. Deleted memos are sent as Firestore documents with `deleted = true` so other devices can remove the local copy.
+
+## macOS Shell
+
+Key files:
+
+- [macos/DreamCueMac/ContentView.swift](../macos/DreamCueMac/ContentView.swift)
+- [macos/DreamCueMac/MemoStore.swift](../macos/DreamCueMac/MemoStore.swift)
+- [macos/DreamCueMac/FirebaseRestSyncService.swift](../macos/DreamCueMac/FirebaseRestSyncService.swift)
+
+Responsibilities:
+
+- SwiftUI navigation
+- Local memo CRUD
+- Local search
+- Firebase Auth REST sign-in and account creation
+- Firestore REST upload, deletion tombstones, and polling
 
 ## Limits
 
 1. Search is not embedding-based semantic search yet.
-2. Notifications open the App for review; they do not yet provide per-memo actions inside the notification.
+2. Notifications open the Android App for review; they do not yet provide per-memo actions inside the notification.
+3. macOS sync uses polling instead of a Firestore snapshot listener because the macOS client avoids bundling the Firebase Apple SDK in this repository version.

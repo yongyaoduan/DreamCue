@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -89,6 +90,11 @@ fun DreamCueApp(
     onRequestDelete: (Memo) -> Unit,
     onDismissDeleteRequest: () -> Unit,
     onConfirmDelete: () -> Unit,
+    onSyncEmailChange: (String) -> Unit,
+    onSyncPasswordChange: (String) -> Unit,
+    onSignInSync: () -> Unit,
+    onCreateSyncAccount: () -> Unit,
+    onSignOutSync: () -> Unit,
 ) {
     val context = LocalContext.current
     val latestSelectedScreen = rememberUpdatedState(state.selectedScreen)
@@ -154,7 +160,7 @@ fun DreamCueApp(
 
                     state.nativeError?.let { nativeError ->
                         MessageCard(
-                            title = "Rust 核心还没成功加载",
+                            title = "Rust core is not loaded",
                             content = nativeError,
                             tone = MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f),
                         )
@@ -162,7 +168,7 @@ fun DreamCueApp(
 
                     state.errorMessage?.let { errorMessage ->
                         MessageCard(
-                            title = "提示",
+                            title = "Notice",
                             content = errorMessage,
                             tone = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                         )
@@ -197,6 +203,11 @@ fun DreamCueApp(
 
                             MemoScreen.REMINDER -> ReminderScreen(
                                 state = state,
+                                onSyncEmailChange = onSyncEmailChange,
+                                onSyncPasswordChange = onSyncPasswordChange,
+                                onSignInSync = onSignInSync,
+                                onCreateSyncAccount = onCreateSyncAccount,
+                                onSignOutSync = onSignOutSync,
                                 showTimePicker = {
                                     TimePickerDialog(
                                         context,
@@ -235,18 +246,18 @@ fun DreamCueApp(
         state.pendingDeleteMemo?.let { memo ->
             AlertDialog(
                 onDismissRequest = onDismissDeleteRequest,
-                title = { Text("删除这条备忘？") },
+                title = { Text("Delete this memo?") },
                 text = {
-                    Text("“${memo.content}” 会和它的历史日志一起被永久移除，之后无法恢复。")
+                    Text("\"${memo.content}\" and its history will be permanently removed.")
                 },
                 confirmButton = {
                     Button(onClick = onConfirmDelete) {
-                        Text("删除")
+                        Text("Delete")
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = onDismissDeleteRequest) {
-                        Text("取消")
+                        Text("Cancel")
                     }
                 },
             )
@@ -283,12 +294,12 @@ private fun CurrentScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "写一条新的备忘",
+                        text = "Write a New Memo",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "保留原样，不强制格式化，适合一句话快速记下。",
+                        text = "Keep the original wording. Short notes work best.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
                     )
@@ -296,8 +307,8 @@ private fun CurrentScreen(
                         value = state.draft,
                         onValueChange = onDraftChange,
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("输入你的备忘") },
-                        placeholder = { Text("例如：周二下班前记得去拿快递") },
+                        label = { Text("Memo") },
+                        placeholder = { Text("Example: Pick up the package before Tuesday evening") },
                         minLines = 3,
                     )
                     Row(
@@ -305,7 +316,7 @@ private fun CurrentScreen(
                         horizontalArrangement = Arrangement.End,
                     ) {
                         Button(onClick = onAddMemo) {
-                            Text("保存")
+                            Text("Save")
                         }
                     }
                 }
@@ -314,14 +325,14 @@ private fun CurrentScreen(
 
         item {
             SectionHeader(
-                title = "正在提醒中的备忘",
-                subtitle = "${state.currentMemos.size} 条，按最近更新排序",
+                title = "Active Memos",
+                subtitle = "${state.currentMemos.size} items, sorted by recent updates",
             )
         }
 
         if (state.currentMemos.isEmpty()) {
             item {
-                EmptyCard("当前没有正在提醒的备忘")
+                EmptyCard("No active memos yet")
             }
         } else {
             items(items = state.currentMemos, key = { "current-${it.id}" }) { memo ->
@@ -368,15 +379,15 @@ private fun SearchScreen(
                         value = state.searchQuery,
                         onValueChange = onSearchQueryChange,
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("搜索内容") },
-                        placeholder = { Text("例如：会议、付款、回电话") },
+                        label = { Text("Search") },
+                        placeholder = { Text("Example: meeting, payment, phone call") },
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                     ) {
                         Button(onClick = onRunSearch) {
-                            Text("搜索")
+                            Text("Search")
                         }
                     }
                 }
@@ -387,13 +398,13 @@ private fun SearchScreen(
             showSearchResults -> {
                 item {
                     SectionHeader(
-                        title = "搜索结果",
-                        subtitle = "按相关性排序，共 ${state.searchResults.size} 条",
+                        title = "Search Results",
+                        subtitle = "Sorted by relevance, ${state.searchResults.size} items",
                     )
                 }
                 if (state.searchResults.isEmpty()) {
                     item {
-                        EmptyCard("还没有找到匹配的备忘")
+                        EmptyCard("No matching memos found")
                     }
                 } else {
                     items(items = state.searchResults, key = { "search-${it.memo.id}" }) { result ->
@@ -427,7 +438,7 @@ private fun HistoryScreen(
 
         if (state.historyMemos.isEmpty()) {
             item {
-                EmptyCard("还没有被消除的历史备忘")
+                EmptyCard("No cleared memos yet")
             }
         } else {
             items(items = state.historyMemos, key = { "history-${it.id}" }) { memo ->
@@ -443,6 +454,11 @@ private fun HistoryScreen(
 @Composable
 private fun ReminderScreen(
     state: MainUiState,
+    onSyncEmailChange: (String) -> Unit,
+    onSyncPasswordChange: (String) -> Unit,
+    onSignInSync: () -> Unit,
+    onCreateSyncAccount: () -> Unit,
+    onSignOutSync: () -> Unit,
     showTimePicker: () -> Unit,
 ) {
     LazyColumn(
@@ -467,12 +483,12 @@ private fun ReminderScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        text = "当前提醒时间：${state.reminderTime.asText()}",
+                        text = "Current reminder time: ${state.reminderTime.asText()}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "到点后会为每条当前备忘发送一条通知。",
+                        text = "DreamCue sends one notification for each active memo at that time.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Row(
@@ -480,7 +496,7 @@ private fun ReminderScreen(
                         horizontalArrangement = Arrangement.End,
                     ) {
                         Button(onClick = showTimePicker) {
-                            Text("选择提醒时间")
+                            Text("Choose Time")
                         }
                     }
                 }
@@ -489,10 +505,61 @@ private fun ReminderScreen(
 
         item {
             MessageCard(
-                title = "提醒权限",
-                content = "如果没有收到提醒，请在系统设置中允许通知和闹钟提醒权限。",
+                title = "Reminder Permissions",
+                content = "If reminders do not appear, allow notifications and exact alarms in system settings.",
                 tone = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
             )
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = "Sync Account",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = state.syncStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedTextField(
+                        value = state.syncEmail,
+                        onValueChange = onSyncEmailChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Email") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = state.syncPassword,
+                        onValueChange = onSyncPasswordChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    ) {
+                        TextButton(onClick = onSignOutSync) {
+                            Text("Sign Out")
+                        }
+                        TextButton(onClick = onCreateSyncAccount) {
+                            Text("Create Account")
+                        }
+                        Button(onClick = onSignInSync) {
+                            Text("Sign In")
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -621,7 +688,7 @@ private fun MemoDetailDialog(
                     IconButton(onClick = onDelete) {
                         Icon(
                             imageVector = Icons.Outlined.DeleteOutline,
-                            contentDescription = "删除",
+                            contentDescription = "Delete",
                         )
                     }
                 }
@@ -630,12 +697,12 @@ private fun MemoDetailDialog(
                     onValueChange = onDraftChange,
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 6,
-                    placeholder = { Text("写下你的备忘") },
+                    placeholder = { Text("Write your memo") },
                 )
-                FlowLine("添加时间", formatTimestamp(memo.createdAtMs))
-                FlowLine("最后修改", formatTimestamp(memo.updatedAtMs))
+                FlowLine("Added", formatTimestamp(memo.createdAtMs))
+                FlowLine("Last Modified", formatTimestamp(memo.updatedAtMs))
                 if (!memo.isActive) {
-                    FlowLine("消除时间", formatTimestamp(memo.clearedAtMs))
+                    FlowLine("Cleared", formatTimestamp(memo.clearedAtMs))
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -648,7 +715,7 @@ private fun MemoDetailDialog(
                             } else {
                                 Icons.AutoMirrored.Outlined.Undo
                             },
-                            contentDescription = if (memo.isActive) "消除" else "重新提醒",
+                            contentDescription = if (memo.isActive) "Clear" else "Reopen",
                         )
                     }
                 }
@@ -685,7 +752,7 @@ private fun SearchResultCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(modifier = Modifier.width(10.dp))
-                StatusPill(if (result.memo.isActive) "当前" else "历史")
+                StatusPill(if (result.memo.isActive) "Current" else "History")
             }
             Text(
                 text = memoSummaryLine(result.memo),
@@ -794,25 +861,25 @@ private fun FlowLine(label: String, value: String) {
 
 private fun MemoScreen.navLabel(): String {
     return when (this) {
-        MemoScreen.CURRENT -> "当前"
-        MemoScreen.SEARCH -> "搜索"
-        MemoScreen.HISTORY -> "历史"
-        MemoScreen.REMINDER -> "设置"
+        MemoScreen.CURRENT -> "Current"
+        MemoScreen.SEARCH -> "Search"
+        MemoScreen.HISTORY -> "History"
+        MemoScreen.REMINDER -> "Settings"
     }
 }
 
 private fun memoSummaryLine(memo: Memo): String {
     return if (memo.isActive) {
-        val label = if (memo.updatedAtMs > memo.createdAtMs) "最近修改" else "添加于"
+        val label = if (memo.updatedAtMs > memo.createdAtMs) "Updated" else "Added"
         "$label ${formatTimestamp(memo.updatedAtMs)}"
     } else {
-        "消除于 ${formatTimestamp(memo.clearedAtMs)}"
+        "Cleared ${formatTimestamp(memo.clearedAtMs)}"
     }
 }
 
 private fun formatTimestamp(timestampMs: Long?): String {
     if (timestampMs == null) {
-        return "未发生"
+        return "Never"
     }
     val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     return formatter.format(Date(timestampMs))

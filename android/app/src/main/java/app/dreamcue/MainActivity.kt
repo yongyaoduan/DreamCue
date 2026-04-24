@@ -55,6 +55,11 @@ class MainActivity : ComponentActivity() {
                 onRequestDelete = viewModel::requestDelete,
                 onDismissDeleteRequest = viewModel::dismissDeleteRequest,
                 onConfirmDelete = viewModel::deleteMemo,
+                onSyncEmailChange = viewModel::updateSyncEmail,
+                onSyncPasswordChange = viewModel::updateSyncPassword,
+                onSignInSync = viewModel::signInSync,
+                onCreateSyncAccount = viewModel::createSyncAccount,
+                onSignOutSync = viewModel::signOutSync,
             )
         }
     }

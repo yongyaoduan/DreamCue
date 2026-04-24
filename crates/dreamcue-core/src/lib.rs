@@ -263,6 +263,74 @@ impl MemoService {
         Ok(())
     }
 
+    pub fn apply_remote_memo(&mut self, memo: &Memo) -> Result<Memo> {
+        normalize_content(&memo.content)?;
+
+        if let Some(existing) = self.get_memo_optional(&memo.id)? {
+            if existing.updated_at_ms > memo.updated_at_ms {
+                return Ok(existing);
+            }
+
+            self.conn
+                .execute(
+                    "UPDATE memos
+                     SET content = ?,
+                         status = ?,
+                         created_at_ms = ?,
+                         updated_at_ms = ?,
+                         cleared_at_ms = ?,
+                         reminder_count = ?,
+                         last_reviewed_at_ms = ?
+                     WHERE id = ?",
+                    params![
+                        &memo.content,
+                        memo.status.as_str(),
+                        memo.created_at_ms,
+                        memo.updated_at_ms,
+                        memo.cleared_at_ms,
+                        memo.reminder_count,
+                        memo.last_reviewed_at_ms,
+                        &memo.id
+                    ],
+                )
+                .with_context(|| format!("failed to apply remote memo {}", memo.id))?;
+        } else {
+            self.conn
+                .execute(
+                    "INSERT INTO memos (
+                        id,
+                        content,
+                        status,
+                        created_at_ms,
+                        updated_at_ms,
+                        cleared_at_ms,
+                        reminder_count,
+                        last_reviewed_at_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    params![
+                        &memo.id,
+                        &memo.content,
+                        memo.status.as_str(),
+                        memo.created_at_ms,
+                        memo.updated_at_ms,
+                        memo.cleared_at_ms,
+                        memo.reminder_count,
+                        memo.last_reviewed_at_ms
+                    ],
+                )
+                .with_context(|| format!("failed to insert remote memo {}", memo.id))?;
+        }
+
+        self.get_memo(&memo.id)
+    }
+
+    pub fn delete_remote_memo(&mut self, memo_id: &str) -> Result<()> {
+        if self.get_memo_optional(memo_id)?.is_none() {
+            return Ok(());
+        }
+        self.delete_memo(memo_id)
+    }
+
     pub fn get_memo(&self, memo_id: &str) -> Result<Memo> {
         self.get_memo_optional(memo_id)?
             .ok_or_else(|| anyhow!("memo {memo_id} not found"))
@@ -483,10 +551,10 @@ mod tests {
         let cleared_at = ts(2026, 3, 11, 21, 0);
 
         let memo = service
-            .add_memo_at("记得给妈妈打电话", created_at)
+            .add_memo_at("Call Mom tonight", created_at)
             .expect("create");
         let memo = service
-            .update_memo_at(&memo.id, "记得晚上给妈妈打电话", updated_at)
+            .update_memo_at(&memo.id, "Call Mom after dinner", updated_at)
             .expect("update");
         assert_eq!(memo.updated_at_ms, updated_at);
 
@@ -516,7 +584,7 @@ mod tests {
         let next_day = ts(2026, 3, 11, 21, 0);
 
         let memo = service
-            .add_memo_at("周五前交电费", created_at)
+            .add_memo_at("Pay the utility bill by Friday", created_at)
             .expect("create");
         let snapshot = service.review_snapshot_at(review_time).expect("review");
         assert_eq!(snapshot.due_count, 1);
@@ -533,22 +601,22 @@ mod tests {
     fn search_prefers_close_matches_for_short_memos() {
         let mut service = MemoService::open_in_memory().expect("service");
         service
-            .add_memo_at("明天上午十点开产品会议", ts(2026, 3, 10, 8, 0))
+            .add_memo_at("Product meeting tomorrow at ten", ts(2026, 3, 10, 8, 0))
             .expect("create");
         service
-            .add_memo_at("今晚买牛奶和鸡蛋", ts(2026, 3, 10, 8, 1))
+            .add_memo_at("Buy milk and eggs tonight", ts(2026, 3, 10, 8, 1))
             .expect("create");
 
-        let results = service.search_memos("会议", 10).expect("search");
+        let results = service.search_memos("meeting", 10).expect("search");
         assert_eq!(results.len(), 1);
-        assert!(results[0].memo.content.contains("会议"));
+        assert!(results[0].memo.content.contains("meeting"));
     }
 
     #[test]
     fn deleting_a_memo_removes_it_and_its_history() {
         let mut service = MemoService::open_in_memory().expect("service");
         let memo = service
-            .add_memo_at("稍后删除这条", ts(2026, 3, 10, 8, 0))
+            .add_memo_at("Delete this memo later", ts(2026, 3, 10, 8, 0))
             .expect("create");
         service
             .clear_memo_at(&memo.id, ts(2026, 3, 10, 9, 0))
@@ -563,5 +631,93 @@ mod tests {
             .expect("lookup")
             .is_none());
         assert!(service.list_events(10).expect("events").is_empty());
+    }
+
+    #[test]
+    fn applying_remote_memo_inserts_missing_memo() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let remote = Memo {
+            id: "remote-a".to_string(),
+            content: "Pay rent before Friday".to_string(),
+            status: MemoStatus::Active,
+            created_at_ms: ts(2026, 3, 10, 8, 0),
+            updated_at_ms: ts(2026, 3, 10, 8, 0),
+            cleared_at_ms: None,
+            reminder_count: 0,
+            last_reviewed_at_ms: None,
+        };
+
+        let applied = service.apply_remote_memo(&remote).expect("apply");
+
+        assert_eq!(applied, remote);
+        assert_eq!(service.get_memo("remote-a").expect("memo"), remote);
+    }
+
+    #[test]
+    fn applying_remote_memo_keeps_newer_local_memo() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let memo = service
+            .add_memo_at("Book hotel", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        service
+            .update_memo_at(&memo.id, "Book hotel near station", ts(2026, 3, 10, 9, 0))
+            .expect("update");
+        let remote = Memo {
+            id: memo.id.clone(),
+            content: "Book hotel near airport".to_string(),
+            status: MemoStatus::Active,
+            created_at_ms: ts(2026, 3, 10, 8, 0),
+            updated_at_ms: ts(2026, 3, 10, 8, 30),
+            cleared_at_ms: None,
+            reminder_count: 0,
+            last_reviewed_at_ms: None,
+        };
+
+        let applied = service.apply_remote_memo(&remote).expect("apply");
+
+        assert_eq!(applied.content, "Book hotel near station");
+        assert_eq!(
+            service.get_memo(&memo.id).expect("memo").content,
+            "Book hotel near station"
+        );
+    }
+
+    #[test]
+    fn applying_remote_memo_replaces_older_local_memo() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let memo = service
+            .add_memo_at("Call bank", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        let remote = Memo {
+            id: memo.id.clone(),
+            content: "Call bank about card".to_string(),
+            status: MemoStatus::Active,
+            created_at_ms: ts(2026, 3, 10, 8, 0),
+            updated_at_ms: ts(2026, 3, 10, 9, 0),
+            cleared_at_ms: None,
+            reminder_count: 0,
+            last_reviewed_at_ms: None,
+        };
+
+        let applied = service.apply_remote_memo(&remote).expect("apply");
+
+        assert_eq!(applied.content, "Call bank about card");
+        assert_eq!(
+            service.get_memo(&memo.id).expect("memo").content,
+            "Call bank about card"
+        );
+    }
+
+    #[test]
+    fn deleting_remote_memo_is_idempotent() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let memo = service
+            .add_memo_at("Remove synced memo", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+
+        service.delete_remote_memo(&memo.id).expect("delete");
+        service.delete_remote_memo(&memo.id).expect("delete again");
+
+        assert!(service.get_memo_optional(&memo.id).expect("lookup").is_none());
     }
 }

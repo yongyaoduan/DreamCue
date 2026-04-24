@@ -61,9 +61,9 @@
   <main>
     <div class="card">
       <h1>DreamCue Privacy Policy</h1>
-      <p class="meta">Effective date: 2026-03-14</p>
+      <p class="meta">Effective date: 2026-04-24</p>
 
-      <p>DreamCue is a local memo reminder App.</p>
+      <p>DreamCue is a memo reminder App with local storage and optional Firebase sync.</p>
 
       <h2>1. Data Processed by the App</h2>
       <p>DreamCue stores the following data on the user's device:</p>
@@ -73,16 +73,19 @@
         <li>Reminder status</li>
         <li>Local event history</li>
       </ul>
+      <p>When sync is enabled, DreamCue also processes the Firebase Auth account email, synced memo content and timestamps, and deletion markers used to remove memos from other signed-in devices.</p>
 
       <h2>2. Where Data Is Stored</h2>
-      <p>The current version stores memo data locally on the device in <code>dreamcue.sqlite3</code>.</p>
-      <p>The current version does not provide account login, cloud sync, developer server upload, or third-party data sharing.</p>
+      <p>The Android version stores memo data locally on the device in <code>dreamcue.sqlite3</code>.</p>
+      <p>The macOS version stores memo data locally in the user's Application Support directory.</p>
+      <p>If the user signs in, memo data is synced to Firebase Firestore under the authenticated Firebase user ID: <code>users/{uid}/memos/{memoId}</code>.</p>
 
       <h2>3. Permissions</h2>
       <ul>
         <li><code>POST_NOTIFICATIONS</code>: sends daily reminder notifications.</li>
         <li><code>SCHEDULE_EXACT_ALARM</code>: schedules daily reminders at a fixed time.</li>
         <li><code>RECEIVE_BOOT_COMPLETED</code>: restores reminders after device restart.</li>
+        <li><code>INTERNET</code>: signs in to Firebase and syncs memo data.</li>
       </ul>
 
       <h2>4. User Controls</h2>
@@ -91,16 +94,17 @@
         <li>Clear a memo into History</li>
         <li>Reopen a historical memo</li>
         <li>Permanently delete a memo and its related event history</li>
+        <li>Sign out of the sync account</li>
       </ul>
 
       <h2>5. Data Sharing</h2>
-      <p>The current version does not sell, rent, or share memo data with third parties.</p>
+      <p>DreamCue does not sell or rent memo data. When sync is enabled, memo data is sent to Firebase services for authentication and cross-device sync.</p>
 
       <h2>6. Children's Privacy</h2>
       <p>DreamCue is not designed specifically for children.</p>
 
       <h2>7. Policy Updates</h2>
-      <p>This policy must be updated before release if DreamCue adds cloud sync, account login, analytics, crash reporting, online AI search, or any remote service.</p>
+      <p>This policy must be updated before release if DreamCue adds analytics, crash reporting, online AI search, new account providers, or any other remote service.</p>
 
       <h2>8. Contact</h2>
       <p>Replace this section with the developer support email or public website before publishing.</p>

@@ -10,6 +10,7 @@ import app.dreamcue.DreamCueRepository
 import app.dreamcue.model.Memo
 import app.dreamcue.model.ReminderTime
 import app.dreamcue.model.SearchResult
+import app.dreamcue.sync.FirebaseSyncCoordinator
 import app.dreamcue.worker.NotificationHelper
 import app.dreamcue.worker.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
@@ -23,20 +24,20 @@ enum class MemoScreen(
     val subtitle: String,
 ) {
     CURRENT(
-        title = "当前备忘",
-        subtitle = "轻点一条备忘可查看详情",
+        title = "Current Memos",
+        subtitle = "Tap a memo to view details",
     ),
     SEARCH(
-        title = "搜索备忘",
-        subtitle = "输入关键词后点击搜索",
+        title = "Search Memos",
+        subtitle = "Enter keywords and run search",
     ),
     HISTORY(
-        title = "历史备忘",
-        subtitle = "这里保留已经消除的备忘",
+        title = "History",
+        subtitle = "Cleared memos stay here",
     ),
     REMINDER(
-        title = "提醒设置",
-        subtitle = "设置每天的提醒时间",
+        title = "Reminder Settings",
+        subtitle = "Set the daily reminder time",
     ),
 }
 
@@ -53,6 +54,9 @@ data class MainUiState(
     val nativeReady: Boolean = false,
     val nativeError: String? = null,
     val errorMessage: String? = null,
+    val syncEmail: String = "",
+    val syncPassword: String = "",
+    val syncStatus: String = "Sign in to sync across devices.",
     val selectedMemo: Memo? = null,
     val detailDraft: String = "",
     val pendingDeleteMemo: Memo? = null,
@@ -68,6 +72,7 @@ class DreamCueViewModel(
     private val repository: DreamCueRepository,
 ) : ViewModel() {
     private var detailAutoSaveJob: Job? = null
+    private val syncCoordinator = FirebaseSyncCoordinator(repository)
 
     var uiState by mutableStateOf(
         MainUiState(
@@ -79,6 +84,7 @@ class DreamCueViewModel(
 
     init {
         refresh()
+        startSync()
     }
 
     fun selectScreen(screen: MemoScreen) {
@@ -104,6 +110,51 @@ class DreamCueViewModel(
     fun updateDetailDraft(value: String) {
         uiState = uiState.copy(detailDraft = value)
         scheduleDetailAutoSave()
+    }
+
+    fun updateSyncEmail(value: String) {
+        uiState = uiState.copy(syncEmail = value)
+    }
+
+    fun updateSyncPassword(value: String) {
+        uiState = uiState.copy(syncPassword = value)
+    }
+
+    fun signInSync() {
+        val email = uiState.syncEmail
+        val password = uiState.syncPassword
+        if (email.isBlank() || password.isBlank()) {
+            uiState = uiState.copy(syncStatus = "Enter an email and password.")
+            return
+        }
+
+        syncCoordinator.signIn(
+            email = email,
+            password = password,
+            onStatus = ::updateSyncStatus,
+            onRemoteChange = ::refresh,
+        )
+    }
+
+    fun createSyncAccount() {
+        val email = uiState.syncEmail
+        val password = uiState.syncPassword
+        if (email.isBlank() || password.isBlank()) {
+            uiState = uiState.copy(syncStatus = "Enter an email and password.")
+            return
+        }
+
+        syncCoordinator.createAccount(
+            email = email,
+            password = password,
+            onStatus = ::updateSyncStatus,
+            onRemoteChange = ::refresh,
+        )
+    }
+
+    fun signOutSync() {
+        syncCoordinator.signOut(::updateSyncStatus)
+        uiState = uiState.copy(syncPassword = "")
     }
 
     fun openMemoDetail(memo: Memo) {
@@ -178,13 +229,15 @@ class DreamCueViewModel(
                     nativeError = null,
                     isLoading = false,
                     reminderTime = repository.reminderTime(),
+                    syncEmail = syncCoordinator.currentEmail().ifBlank { uiState.syncEmail },
                 )
+                syncCoordinator.uploadAll(payload.currentMemos + payload.historyMemos)
             }.onFailure { throwable ->
                 uiState = uiState.copy(
                     isLoading = false,
                     nativeReady = false,
                     nativeError = repository.nativeLoadError(),
-                    errorMessage = throwable.message ?: "加载失败",
+                    errorMessage = throwable.message ?: "Load failed",
                 )
             }
         }
@@ -193,7 +246,7 @@ class DreamCueViewModel(
     fun addMemo() {
         val draft = uiState.draft
         if (draft.isBlank()) {
-            uiState = uiState.copy(errorMessage = "请输入一条备忘")
+            uiState = uiState.copy(errorMessage = "Enter a memo")
             return
         }
 
@@ -257,6 +310,7 @@ class DreamCueViewModel(
             },
             afterSuccess = {
                 NotificationHelper.cancelMemoReminder(repository.appContext, memo.id)
+                syncCoordinator.uploadDeletedMemo(memo.id)
                 uiState = uiState.copy(
                     pendingDeleteMemo = null,
                     selectedMemo = if (uiState.selectedMemo?.id == memo.id) null else uiState.selectedMemo,
@@ -275,8 +329,20 @@ class DreamCueViewModel(
 
     override fun onCleared() {
         detailAutoSaveJob?.cancel()
+        syncCoordinator.stop()
         repository.dispose()
         super.onCleared()
+    }
+
+    private fun startSync() {
+        syncCoordinator.start(
+            onStatus = ::updateSyncStatus,
+            onRemoteChange = ::refresh,
+        )
+    }
+
+    private fun updateSyncStatus(status: String) {
+        uiState = uiState.copy(syncStatus = status)
     }
 
     private fun runMutation(
@@ -301,7 +367,7 @@ class DreamCueViewModel(
             }.onFailure { throwable ->
                 uiState = uiState.copy(
                     isLoading = false,
-                    errorMessage = throwable.message ?: "操作失败",
+                    errorMessage = throwable.message ?: "Action failed",
                     nativeError = repository.nativeLoadError(),
                 )
             }
@@ -340,7 +406,7 @@ class DreamCueViewModel(
                 applyUpdatedMemo(updatedMemo)
             }.onFailure { throwable ->
                 uiState = uiState.copy(
-                    errorMessage = throwable.message ?: "自动保存失败",
+                    errorMessage = throwable.message ?: "Autosave failed",
                     nativeError = repository.nativeLoadError(),
                 )
             }

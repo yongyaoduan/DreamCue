@@ -2,7 +2,7 @@ use std::ptr;
 use std::sync::Mutex;
 
 use anyhow::{anyhow, Context, Result};
-use dreamcue_core::MemoService;
+use dreamcue_core::{Memo, MemoService};
 use jni::objects::{JClass, JString};
 use jni::sys::{jint, jlong, jstring};
 use jni::JNIEnv;
@@ -143,6 +143,35 @@ pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeDeleteMemo(
     let response = with_service_json(handle, || {
         let memo_id = get_string(&mut env, memo_id)?;
         with_service(handle, |service| service.delete_memo(&memo_id))
+    });
+    to_jstring(&mut env, response)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeApplyRemoteMemo(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    memo_json: JString,
+) -> jstring {
+    let response = with_service_json(handle, || {
+        let memo_json = get_string(&mut env, memo_json)?;
+        let memo: Memo = serde_json::from_str(&memo_json).context("failed to parse remote memo")?;
+        with_service(handle, |service| service.apply_remote_memo(&memo))
+    });
+    to_jstring(&mut env, response)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeDeleteRemoteMemo(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    memo_id: JString,
+) -> jstring {
+    let response = with_service_json(handle, || {
+        let memo_id = get_string(&mut env, memo_id)?;
+        with_service(handle, |service| service.delete_remote_memo(&memo_id))
     });
     to_jstring(&mut env, response)
 }

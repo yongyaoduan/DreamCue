@@ -241,14 +241,14 @@ fn is_subsequence(needle: &str, haystack: &str) -> bool {
 }
 
 const SYNONYM_GROUPS: &[&[&str]] = &[
-    &["提醒", "记得", "别忘", "待办"],
-    &["开会", "会议", "讨论", "沟通"],
-    &["买", "购买", "采购", "下单"],
-    &["学习", "复习", "看书", "准备考试"],
-    &["运动", "锻炼", "跑步", "健身"],
-    &["联系", "回电话", "回拨", "沟通"],
-    &["缴费", "付款", "交钱", "支付"],
-    &["提交", "上交", "发送", "发出"],
-    &["看医生", "复诊", "门诊", "挂号"],
-    &["做饭", "买菜", "准备晚饭", "煮饭"],
+    &["remind", "remember", "todo", "task"],
+    &["meeting", "discussion", "call", "sync"],
+    &["buy", "purchase", "order", "shop"],
+    &["study", "review", "read", "exam"],
+    &["exercise", "workout", "run", "gym"],
+    &["contact", "phone", "callback", "reply"],
+    &["bill", "payment", "pay", "invoice"],
+    &["submit", "send", "deliver", "upload"],
+    &["doctor", "clinic", "appointment", "checkup"],
+    &["cook", "groceries", "dinner", "meal"],
 ];

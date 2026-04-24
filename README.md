@@ -1,6 +1,6 @@
 # DreamCue
 
-DreamCue is a local memo reminder App. The business layer is written in `Rust`; the Android shell uses `Kotlin` and `Compose`.
+DreamCue is a memo reminder App with local-first storage and optional Firebase sync. The shared Android business layer is written in `Rust`; the Android shell uses `Kotlin` and `Compose`. The macOS app is a native `SwiftUI` client.
 
 ## Features
 
@@ -10,12 +10,15 @@ DreamCue is a local memo reminder App. The business layer is written in `Rust`; 
 - Move cleared memos to History so they no longer enter daily reminders.
 - Record create, edit, keep, clear, and reopen events.
 - Search current and historical memos.
+- Sync memos across Android and macOS through Firebase Auth and Firestore.
+- Keep remote data tenant-scoped under `users/{uid}/memos`.
 
 ## Project Layout
 
 - `crates/dreamcue-core`: Rust core for SQLite storage, event logs, daily review queues, and search.
 - `crates/dreamcue-android-ffi`: Rust JNI bridge that returns JSON to Android.
 - `android/`: Android App with Compose UI, notification permission handling, alarm scheduling, and boot rescheduling.
+- `macos/`: macOS SwiftUI App with local JSON storage, Firebase Auth REST login, and Firestore REST sync polling.
 - `docs/architecture.md`: Architecture notes.
 - `scripts/build-rust-android.sh`: Android native library build script.
 
@@ -26,13 +29,14 @@ Install these tools before building:
 1. Rust toolchain: `rustup`
 2. Android Studio, Android SDK, Android NDK
 3. `cargo-ndk`
-4. Android Rust targets:
+4. Xcode for the macOS App
+5. Android Rust targets:
 
 ```bash
 rustup target add aarch64-linux-android x86_64-linux-android
 ```
 
-## Build
+## Android Build
 
 1. Build the Rust dynamic library:
 
@@ -44,9 +48,56 @@ rustup target add aarch64-linux-android x86_64-linux-android
 
 3. Sync Gradle and run `app`.
 
+## macOS Build
+
+Build the macOS App from the repository root:
+
+```bash
+xcodebuild -project macos/DreamCueMac.xcodeproj -scheme DreamCueMac -configuration Debug -destination 'platform=macOS' build
+```
+
+## Firebase Setup
+
+Android reads Firebase configuration from these string resources:
+
+- `firebase_project_id`
+- `firebase_application_id`
+- `firebase_api_key`
+
+macOS reads Firebase configuration from `macos/DreamCueMac/FirebaseConfig.plist`:
+
+- `ProjectID`
+- `APIKey`
+
+Both clients require Firebase Auth email/password sign-in. All synced memos are written under `users/{uid}/memos`, where `uid` is the authenticated Firebase user ID.
+
+Use Firestore rules equivalent to:
+
+```text
+match /users/{userId}/memos/{memoId} {
+  allow read, write: if request.auth != null && request.auth.uid == userId;
+}
+```
+
+## Test
+
+Run the Rust and Android checks:
+
+```bash
+cargo test --workspace
+gradle -p android :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+Build the macOS App and XCUITest bundle:
+
+```bash
+xcodebuild -project macos/DreamCueMac.xcodeproj -scheme DreamCueMac -configuration Debug -destination 'platform=macOS' build-for-testing
+```
+
 ## Current State
 
 - The Rust core covers memo lifecycle, event logs, daily review queues, and search.
-- The Android shell covers the base UI, notification permission request, daily reminder scheduling, and boot rescheduling.
+- The Android shell covers the base UI, notification permission request, daily reminder scheduling, boot rescheduling, Firebase Auth, and Firestore sync.
+- The macOS shell covers local memo CRUD, search, Firebase Auth REST login, and Firestore REST sync polling.
 - Search is currently a deterministic hybrid search with exact matching, character n-grams, phrase similarity, and synonym hints.
 - Semantic search can be added in `crates/dreamcue-core/src/search.rs` with local embedding or server-side embedding.

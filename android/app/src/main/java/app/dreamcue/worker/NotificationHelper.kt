@@ -81,9 +81,9 @@ object NotificationHelper {
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle("备忘提醒")
+                .setContentTitle("Memo Reminder")
                 .setContentText(memo.content)
-                .setSubText("添加于 ${formatTimestamp(memo.createdAtMs)}")
+                .setSubText("Added ${formatTimestamp(memo.createdAtMs)}")
                 .setStyle(NotificationCompat.BigTextStyle().bigText(memo.content))
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)

@@ -1,4 +1,4 @@
-package com.example.memolog.ui
+package app.dreamcue.ui
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -6,12 +6,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.memolog.MemoRepository
-import com.example.memolog.model.Memo
-import com.example.memolog.model.ReminderTime
-import com.example.memolog.model.SearchResult
-import com.example.memolog.worker.NotificationHelper
-import com.example.memolog.worker.ReminderScheduler
+import app.dreamcue.DreamCueRepository
+import app.dreamcue.model.Memo
+import app.dreamcue.model.ReminderTime
+import app.dreamcue.model.SearchResult
+import app.dreamcue.worker.NotificationHelper
+import app.dreamcue.worker.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -64,8 +64,8 @@ private data class DashboardPayload(
     val searchResults: List<SearchResult>,
 )
 
-class MainViewModel(
-    private val repository: MemoRepository,
+class DreamCueViewModel(
+    private val repository: DreamCueRepository,
 ) : ViewModel() {
     private var detailAutoSaveJob: Job? = null
 
@@ -377,11 +377,11 @@ class MainViewModel(
     }
 
     companion object {
-        fun factory(repository: MemoRepository): ViewModelProvider.Factory {
+        fun factory(repository: DreamCueRepository): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return MainViewModel(repository) as T
+                    return DreamCueViewModel(repository) as T
                 }
             }
         }

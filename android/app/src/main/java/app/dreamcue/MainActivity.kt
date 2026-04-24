@@ -1,4 +1,4 @@
-package com.example.memolog
+package app.dreamcue
 
 import android.Manifest
 import android.content.ActivityNotFoundException
@@ -13,10 +13,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.memolog.ui.MainViewModel
-import com.example.memolog.ui.MemoApp
-import com.example.memolog.worker.NotificationHelper
-import com.example.memolog.worker.ReminderScheduler
+import app.dreamcue.ui.DreamCueViewModel
+import app.dreamcue.ui.DreamCueApp
+import app.dreamcue.worker.NotificationHelper
+import app.dreamcue.worker.ReminderScheduler
 
 class MainActivity : ComponentActivity() {
     private var exactAlarmAccessPrompted = false
@@ -29,17 +29,17 @@ class MainActivity : ComponentActivity() {
 
         NotificationHelper.ensureChannel(this)
 
-        val repository = MemoRepository(applicationContext)
+        val repository = DreamCueRepository(applicationContext)
         ReminderScheduler.schedule(this, repository.reminderTime())
         requestNotificationPermissionIfNeeded()
         requestExactAlarmPermissionIfNeeded()
 
         setContent {
-            val viewModel: MainViewModel = viewModel(
-                factory = MainViewModel.factory(repository),
+            val viewModel: DreamCueViewModel = viewModel(
+                factory = DreamCueViewModel.factory(repository),
             )
 
-            MemoApp(
+            DreamCueApp(
                 state = viewModel.uiState,
                 onDraftChange = viewModel::updateDraft,
                 onAddMemo = viewModel::addMemo,
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        val repository = MemoRepository(applicationContext)
+        val repository = DreamCueRepository(applicationContext)
         ReminderScheduler.schedule(this, repository.reminderTime())
     }
 

@@ -1,4 +1,4 @@
-package com.example.memolog.worker
+package app.dreamcue.worker
 
 import android.content.BroadcastReceiver
 import android.content.Context

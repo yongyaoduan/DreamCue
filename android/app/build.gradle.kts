@@ -16,12 +16,12 @@ val releaseKeystoreProperties = Properties().apply {
 val hasReleaseSigning = releaseKeystoreProperties.isNotEmpty()
 
 android {
-    namespace = "com.example.memolog"
+    namespace = "app.dreamcue"
     compileSdk = 35
     ndkVersion = "27.1.12297006"
 
     defaultConfig {
-        applicationId = "com.example.memolog"
+        applicationId = "app.dreamcue"
         minSdk = 26
         targetSdk = 35
         versionCode = 2

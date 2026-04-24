@@ -52,7 +52,10 @@ impl MemoService {
             last_reviewed_at_ms: None,
         };
 
-        let tx = self.conn.transaction().context("failed to start transaction")?;
+        let tx = self
+            .conn
+            .transaction()
+            .context("failed to start transaction")?;
         tx.execute(
             "INSERT INTO memos (
                 id,
@@ -97,7 +100,10 @@ impl MemoService {
         let content = normalize_content(content)?;
         let existing = self.get_memo(memo_id)?;
 
-        let tx = self.conn.transaction().context("failed to start transaction")?;
+        let tx = self
+            .conn
+            .transaction()
+            .context("failed to start transaction")?;
         tx.execute(
             "UPDATE memos
              SET content = ?, updated_at_ms = ?
@@ -128,7 +134,10 @@ impl MemoService {
             return Err(anyhow!("memo {memo_id} is already cleared"));
         }
 
-        let tx = self.conn.transaction().context("failed to start transaction")?;
+        let tx = self
+            .conn
+            .transaction()
+            .context("failed to start transaction")?;
         tx.execute(
             "UPDATE memos
              SET updated_at_ms = ?,
@@ -161,7 +170,10 @@ impl MemoService {
             return Ok(existing);
         }
 
-        let tx = self.conn.transaction().context("failed to start transaction")?;
+        let tx = self
+            .conn
+            .transaction()
+            .context("failed to start transaction")?;
         tx.execute(
             "UPDATE memos
              SET status = ?,
@@ -196,7 +208,10 @@ impl MemoService {
             return Ok(existing);
         }
 
-        let tx = self.conn.transaction().context("failed to start transaction")?;
+        let tx = self
+            .conn
+            .transaction()
+            .context("failed to start transaction")?;
         tx.execute(
             "UPDATE memos
              SET status = ?,
@@ -227,7 +242,10 @@ impl MemoService {
     pub fn delete_memo_at(&mut self, memo_id: &str, _at_ms: i64) -> Result<()> {
         self.get_memo(memo_id)?;
 
-        let tx = self.conn.transaction().context("failed to start transaction")?;
+        let tx = self
+            .conn
+            .transaction()
+            .context("failed to start transaction")?;
         tx.execute(
             "DELETE FROM memo_events
              WHERE memo_id = ?",
@@ -357,7 +375,10 @@ impl MemoService {
     }
 
     fn query_memos(&self, sql: &str) -> Result<Vec<Memo>> {
-        let mut statement = self.conn.prepare(sql).context("failed to prepare memo query")?;
+        let mut statement = self
+            .conn
+            .prepare(sql)
+            .context("failed to prepare memo query")?;
         let rows = statement
             .query_map([], Self::map_memo_row)
             .context("failed to query memos")?;
@@ -472,9 +493,7 @@ mod tests {
         let memo = service.keep_memo_at(&memo.id, kept_at).expect("keep");
         assert_eq!(memo.reminder_count, 1);
 
-        let memo = service
-            .clear_memo_at(&memo.id, cleared_at)
-            .expect("clear");
+        let memo = service.clear_memo_at(&memo.id, cleared_at).expect("clear");
         assert_eq!(memo.status, MemoStatus::Cleared);
         assert_eq!(memo.cleared_at_ms, Some(cleared_at));
 
@@ -539,7 +558,10 @@ mod tests {
             .delete_memo_at(&memo.id, ts(2026, 3, 10, 10, 0))
             .expect("delete");
 
-        assert!(service.get_memo_optional(&memo.id).expect("lookup").is_none());
+        assert!(service
+            .get_memo_optional(&memo.id)
+            .expect("lookup")
+            .is_none());
         assert!(service.list_events(10).expect("events").is_empty());
     }
 }

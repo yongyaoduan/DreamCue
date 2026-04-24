@@ -1,4 +1,4 @@
-appId: com.example.memolog
+appId: app.dreamcue
 ---
 - launchApp
 - assertVisible: "DreamCue"

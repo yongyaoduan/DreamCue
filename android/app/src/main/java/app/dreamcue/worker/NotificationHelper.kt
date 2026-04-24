@@ -1,4 +1,4 @@
-package com.example.memolog.worker
+package app.dreamcue.worker
 
 import android.Manifest
 import android.app.Notification
@@ -16,8 +16,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.example.memolog.MainActivity
-import com.example.memolog.model.Memo
+import app.dreamcue.MainActivity
+import app.dreamcue.model.Memo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

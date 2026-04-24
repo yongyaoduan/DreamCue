@@ -1,7 +1,7 @@
 [workspace]
 members = [
-  "crates/memo-core",
-  "crates/memo-android-ffi",
+  "crates/dreamcue-core",
+  "crates/dreamcue-android-ffi",
 ]
 resolver = "2"
 

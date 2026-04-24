@@ -1,45 +1,56 @@
-# 数据安全填写建议
+# Data Safety Notes
 
-以下内容基于当前这版代码：
+These notes match the current codebase:
 
-- 没有网络权限
-- 备忘数据保存在本地 SQLite
-- `allowBackup=false`
-- 没有账号体系
-- 没有分析埋点、广告 SDK、云同步、远程上传
+- `android/app/src/main/AndroidManifest.xml` does not declare `android.permission.INTERNET`.
+- Memo data is stored in the local SQLite file `dreamcue.sqlite3`.
+- `android:allowBackup` is set to `false` in `AndroidManifest.xml`.
+- There is no account login code under `android/app/src/main/java/app/dreamcue`.
+- There is no analytics SDK, ads SDK, cloud sync, or remote upload dependency in `android/app/build.gradle.kts`.
 
-## 建议答案
+## Suggested Play Console Answer
 
-### 是否收集或共享任何用户数据
+### Does the App collect or share user data?
 
-- 当前版本建议填写：`No`
+Recommended answer for this version: `No`.
 
-原因：
+Reasoning:
 
-- 备忘内容、时间、日志都只保存在用户设备本地
-- 当前代码没有把这些数据发送到开发者服务器或第三方
-- 没有广告、统计、云同步或账号登录链路
+- Memo content, timestamps, and event logs stay in `dreamcue.sqlite3` on the user's device.
+- The code does not call any HTTP client, REST API, or upload endpoint.
+- The App has no ads, analytics, cloud sync, or account login flow in `android/app/build.gradle.kts`.
 
-## 需要特别注意
+## Recheck Triggers
 
-- 如果你后面加入了云同步、崩溃上报、统计分析、登录系统、远程备份、AI 云搜索，这一页必须重新填写
-- 如果你再次打开 Android 自动备份，也需要重新确认这页是否还应该填 “No”
+Update this file and the Play Console form before release if the App adds:
 
-## 本应用里实际存在的数据
+- Cloud sync through a remote API
+- Crash reporting such as `firebase-crashlytics`
+- Analytics such as `firebase-analytics`
+- Account login through Google, email, or OAuth
+- Remote backup to a server or cloud drive
+- Online AI search using a remote embedding service
+- Android auto backup by changing `android:allowBackup` to `true`
 
-- 备忘内容
-- 添加时间
-- 修改时间
-- 消除时间
-- 提醒状态与提醒次数
+## Local Data
 
-这些数据当前都只用于：
+The App stores:
 
-- 在本地展示
-- 本地搜索排序
-- 本地通知提醒
+- `content`
+- `created_at_ms`
+- `updated_at_ms`
+- `cleared_at_ms`
+- `status`
+- `reminder_count`
+- `memo_events`
 
-## 删除能力
+The data is used for:
 
-- 用户可以消除某条备忘
-- 用户也可以彻底删除某条备忘和相关日志
+- Local display in `DreamCueApp.kt`
+- Local search ranking in `crates/dreamcue-core/src/search.rs`
+- Local notification reminders through `NotificationHelper.kt`
+
+## Deletion
+
+- Users can clear a memo into History through `clear_memo`.
+- Users can permanently delete a memo and its related event history through `delete_memo`.

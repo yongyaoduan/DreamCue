@@ -21,7 +21,7 @@ cargo ndk \
   -t x86_64 \
   -o "$OUTPUT_DIR" \
   build \
-  --package memo-android-ffi \
+  --package dreamcue-android-ffi \
   --release
 
 echo "Rust Android libraries have been generated in: $OUTPUT_DIR"

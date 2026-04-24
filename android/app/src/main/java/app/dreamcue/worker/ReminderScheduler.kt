@@ -1,4 +1,4 @@
-package com.example.memolog.worker
+package app.dreamcue.worker
 
 import android.app.AlarmManager
 import android.app.AlarmManager.AlarmClockInfo
@@ -7,9 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.AlarmManagerCompat
-import com.example.memolog.MainActivity
-import com.example.memolog.MemoRepository
-import com.example.memolog.model.ReminderTime
+import app.dreamcue.MainActivity
+import app.dreamcue.DreamCueRepository
+import app.dreamcue.model.ReminderTime
 import java.util.Calendar
 
 object ReminderScheduler {
@@ -17,7 +17,7 @@ object ReminderScheduler {
 
     fun schedule(context: Context, reminderTime: ReminderTime? = null) {
         val appContext = context.applicationContext
-        val time = reminderTime ?: MemoRepository(appContext).reminderTime()
+        val time = reminderTime ?: DreamCueRepository(appContext).reminderTime()
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = reviewPendingIntent(appContext)
         val triggerAtMillis = nextTriggerAtMillis(time)

@@ -1,20 +1,20 @@
-package com.example.memolog
+package app.dreamcue
 
 import android.content.Context
 import androidx.core.content.edit
-import com.example.memolog.model.Memo
-import com.example.memolog.model.MemoEvent
-import com.example.memolog.model.ReminderTime
-import com.example.memolog.model.ReviewSnapshot
-import com.example.memolog.model.SearchResult
+import app.dreamcue.model.Memo
+import app.dreamcue.model.MemoEvent
+import app.dreamcue.model.ReminderTime
+import app.dreamcue.model.ReviewSnapshot
+import app.dreamcue.model.SearchResult
 import java.io.File
 import org.json.JSONObject
 
-class MemoRepository(context: Context) {
+class DreamCueRepository(context: Context) {
     val appContext: Context = context.applicationContext
 
-    private val prefs = appContext.getSharedPreferences("memo_prefs", Context.MODE_PRIVATE)
-    private val databasePath = File(appContext.filesDir, "memolog.sqlite3").absolutePath
+    private val prefs = appContext.getSharedPreferences("dreamcue_prefs", Context.MODE_PRIVATE)
+    private val databasePath = File(appContext.filesDir, "dreamcue.sqlite3").absolutePath
 
     @Volatile
     private var handle: Long? = null
@@ -24,75 +24,75 @@ class MemoRepository(context: Context) {
         if (existingHandle != null && existingHandle != 0L) {
             return@synchronized Result.success(Unit)
         }
-        if (!NativeBridge.isLoaded()) {
+        if (!DreamCueBridge.isLoaded()) {
             return@synchronized Result.failure(
                 IllegalStateException(
-                    NativeBridge.loadError() ?: "Rust native library is missing",
+                    DreamCueBridge.loadError() ?: "Rust native library is missing",
                 ),
             )
         }
 
         return@synchronized runCatching {
-            val envelope = JSONObject(NativeBridge.nativeInit(databasePath)).requireOk()
+            val envelope = JSONObject(DreamCueBridge.nativeInit(databasePath)).requireOk()
             handle = envelope.getLong("data")
         }
     }
 
     fun isReady(): Boolean = handle != null && handle != 0L
 
-    fun nativeLoadError(): String? = NativeBridge.loadError()
+    fun nativeLoadError(): String? = DreamCueBridge.loadError()
 
     fun addMemo(content: String): Memo = parseObject(
-        NativeBridge.nativeAddMemo(requireHandle(), content),
+        DreamCueBridge.nativeAddMemo(requireHandle(), content),
         Memo::fromJson,
     )
 
     fun updateMemo(memoId: String, content: String): Memo = parseObject(
-        NativeBridge.nativeUpdateMemo(requireHandle(), memoId, content),
+        DreamCueBridge.nativeUpdateMemo(requireHandle(), memoId, content),
         Memo::fromJson,
     )
 
     fun keepMemo(memoId: String): Memo = parseObject(
-        NativeBridge.nativeKeepMemo(requireHandle(), memoId),
+        DreamCueBridge.nativeKeepMemo(requireHandle(), memoId),
         Memo::fromJson,
     )
 
     fun clearMemo(memoId: String): Memo = parseObject(
-        NativeBridge.nativeClearMemo(requireHandle(), memoId),
+        DreamCueBridge.nativeClearMemo(requireHandle(), memoId),
         Memo::fromJson,
     )
 
     fun reopenMemo(memoId: String): Memo = parseObject(
-        NativeBridge.nativeReopenMemo(requireHandle(), memoId),
+        DreamCueBridge.nativeReopenMemo(requireHandle(), memoId),
         Memo::fromJson,
     )
 
     fun deleteMemo(memoId: String) {
-        parseUnit(NativeBridge.nativeDeleteMemo(requireHandle(), memoId))
+        parseUnit(DreamCueBridge.nativeDeleteMemo(requireHandle(), memoId))
     }
 
     fun listActiveMemos(): List<Memo> = parseArray(
-        NativeBridge.nativeListActiveMemos(requireHandle()),
+        DreamCueBridge.nativeListActiveMemos(requireHandle()),
         Memo::fromJson,
     )
 
     fun listAllMemos(): List<Memo> = parseArray(
-        NativeBridge.nativeListAllMemos(requireHandle()),
+        DreamCueBridge.nativeListAllMemos(requireHandle()),
         Memo::fromJson,
     )
 
     fun reviewSnapshot(): ReviewSnapshot = parseObject(
-        NativeBridge.nativeReviewSnapshot(requireHandle()),
+        DreamCueBridge.nativeReviewSnapshot(requireHandle()),
         ReviewSnapshot::fromJson,
     )
 
     fun searchMemos(query: String, limit: Int = 20): List<SearchResult> = parseArray(
-        NativeBridge.nativeSearchMemos(requireHandle(), query, limit),
+        DreamCueBridge.nativeSearchMemos(requireHandle(), query, limit),
         SearchResult::fromJson,
     )
 
     fun listEvents(limit: Int = 50): List<MemoEvent> = parseArray(
-        NativeBridge.nativeListEvents(requireHandle(), limit),
+        DreamCueBridge.nativeListEvents(requireHandle(), limit),
         MemoEvent::fromJson,
     )
 
@@ -111,8 +111,8 @@ class MemoRepository(context: Context) {
 
     fun dispose() {
         val currentHandle = handle ?: return
-        if (NativeBridge.isLoaded()) {
-            NativeBridge.nativeDispose(currentHandle)
+        if (DreamCueBridge.isLoaded()) {
+            DreamCueBridge.nativeDispose(currentHandle)
         }
         handle = null
     }

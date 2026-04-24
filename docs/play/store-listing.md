@@ -6,7 +6,7 @@
 
 ## Short Description
 
-自由记下一句话备忘，每天固定提醒，处理过的进历史，没处理的继续提醒。建议控制在 `80` 个字符内。
+Write a short memo, review it daily, clear it when done, or keep it active.
 
 ## Full Description
 
@@ -22,9 +22,9 @@ Main features:
 - Review active memos every day with `last_reviewed_at_ms`
 - Move cleared memos to History with `cleared_at_ms`
 - Reopen a cleared memo by setting status to `active`
-- Search current and historical memos through `memo-core`
+- Search current and historical memos through `dreamcue-core`
 - Delete a memo and its event history from `memo_events`
-- Keep memo data on the device in `memolog.sqlite3`
+- Keep memo data on the device in `dreamcue.sqlite3`
 
 Good use cases:
 

@@ -1,57 +1,58 @@
-# DreamCue 隐私政策
+# DreamCue Privacy Policy
 
-生效日期：2026-03-14
+Effective date: `2026-03-14`
 
-DreamCue 是一个本地备忘提醒应用。我们非常重视你的隐私。
+DreamCue is a local memo reminder App.
 
-## 1. 我们会处理哪些数据
+## 1. Data Processed by the App
 
-DreamCue 会在你的设备本地保存以下内容：
+DreamCue stores the following data on the user's device:
 
-- 你写下的备忘文本
-- 添加时间、修改时间、消除时间
-- 提醒状态和本地日志
+- Memo text entered by the user
+- Created, updated, reviewed, and cleared timestamps
+- Reminder status
+- Local event history
 
-## 2. 数据保存在哪里
+## 2. Where Data Is Stored
 
-上述数据默认只保存在你的设备本地。
+The current version stores memo data locally on the device in `dreamcue.sqlite3`.
 
-当前版本：
+The current version does not provide:
 
-- 不提供账号系统
-- 不提供云同步
-- 不会把你的备忘上传到开发者服务器
-- 不会把你的备忘共享给第三方
+- Account login
+- Cloud sync
+- Developer server upload
+- Third-party data sharing
 
-## 3. 权限用途
+## 3. Permissions
 
-DreamCue 可能会请求以下权限：
+DreamCue may request these Android permissions:
 
-- 通知权限：用于把每日提醒发到通知栏
-- 闹钟与提醒相关权限：用于在你设定的时间可靠触发每日提醒
-- 开机完成权限：用于设备重启后恢复提醒
+- `POST_NOTIFICATIONS`: sends daily reminder notifications.
+- `SCHEDULE_EXACT_ALARM`: schedules daily reminders at a fixed time.
+- `RECEIVE_BOOT_COMPLETED`: restores reminders after device restart.
 
-## 4. 你可以如何控制数据
+## 4. User Controls
 
-你可以在应用内：
+Users can:
 
-- 修改任意一条备忘
-- 消除一条备忘并转入历史
-- 重新提醒历史备忘
-- 彻底删除一条备忘及相关日志
+- Edit any memo
+- Clear a memo into History
+- Reopen a historical memo
+- Permanently delete a memo and its related event history
 
-## 5. 数据共享
+## 5. Data Sharing
 
-当前版本不会出售、出租或共享你的备忘数据给第三方。
+The current version does not sell, rent, or share memo data with third parties.
 
-## 6. 儿童隐私
+## 6. Children's Privacy
 
-DreamCue 不是专门面向儿童设计的应用。
+DreamCue is not designed specifically for children.
 
-## 7. 隐私政策更新
+## 7. Policy Updates
 
-如果未来功能发生变化，例如加入云同步、账号、分析统计或在线服务，本隐私政策会同步更新。
+This policy must be updated before release if DreamCue adds cloud sync, account login, analytics, crash reporting, online AI search, or any remote service.
 
-## 8. 联系方式
+## 8. Contact
 
-如果你需要补充联系邮箱，可以在发布前把这里替换成你的开发者邮箱。
+Replace this section with the developer support email or public website before publishing.

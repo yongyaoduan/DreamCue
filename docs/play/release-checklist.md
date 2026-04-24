@@ -13,7 +13,7 @@
 
 ## Play Console
 
-1. Create an app with package name `com.example.memolog`.
+1. Create an app with package name `app.dreamcue`.
 2. Fill App content:
    - Privacy policy
    - Data safety

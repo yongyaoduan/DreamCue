@@ -1,10 +1,10 @@
-package com.example.memolog.worker
+package app.dreamcue.worker
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.example.memolog.MemoRepository
+import app.dreamcue.DreamCueRepository
 
 class DailyReviewReceiver : BroadcastReceiver() {
     companion object {
@@ -16,7 +16,7 @@ class DailyReviewReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
 
         Thread {
-            val repository = MemoRepository(appContext)
+            val repository = DreamCueRepository(appContext)
             try {
                 Log.d(TAG, "Received reminder broadcast: action=${intent?.action}")
                 val initialized = repository.initialize()

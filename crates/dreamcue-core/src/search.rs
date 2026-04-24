@@ -98,10 +98,7 @@ struct TextProfile {
 impl TextProfile {
     fn new(input: &str) -> Self {
         let normalized = normalize(input);
-        let compact: String = normalized
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
+        let compact: String = normalized.chars().filter(|c| !c.is_whitespace()).collect();
         let atomic_tokens = atomic_tokens(&normalized);
         let grams = char_grams(&compact, 2)
             .into_iter()

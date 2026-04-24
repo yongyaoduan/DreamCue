@@ -1,13 +1,13 @@
-package com.example.memolog
+package app.dreamcue
 
-class NativeBridge private constructor() {
+class DreamCueBridge private constructor() {
     companion object {
         private var loaded = false
         private var loadFailureMessage: String? = null
 
         init {
             try {
-                System.loadLibrary("memo_android_ffi")
+                System.loadLibrary("dreamcue_android_ffi")
                 loaded = true
             } catch (throwable: Throwable) {
                 loadFailureMessage = throwable.message ?: throwable.javaClass.simpleName

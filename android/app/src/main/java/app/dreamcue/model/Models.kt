@@ -1,4 +1,4 @@
-package com.example.memolog.model
+package app.dreamcue.model
 
 import java.util.Locale
 import org.json.JSONArray

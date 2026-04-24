@@ -1,10 +1,10 @@
-package com.example.memolog.ui
+package app.dreamcue.ui
 
 import android.app.TimePickerDialog
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.TaskAlt
-import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,8 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.example.memolog.model.Memo
-import com.example.memolog.model.SearchResult
+import app.dreamcue.model.Memo
+import app.dreamcue.model.SearchResult
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -61,7 +61,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
-private val MemoColorScheme = lightColorScheme(
+private val DreamCueColorScheme = lightColorScheme(
     primary = Color(0xFF214E4D),
     onPrimary = Color(0xFFFDF8F1),
     secondary = Color(0xFFC4694E),
@@ -73,7 +73,7 @@ private val MemoColorScheme = lightColorScheme(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MemoApp(
+fun DreamCueApp(
     state: MainUiState,
     onDraftChange: (String) -> Unit,
     onAddMemo: () -> Unit,
@@ -118,7 +118,7 @@ fun MemoApp(
             }
     }
 
-    MaterialTheme(colorScheme = MemoColorScheme) {
+    MaterialTheme(colorScheme = DreamCueColorScheme) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
@@ -646,7 +646,7 @@ private fun MemoDetailDialog(
                             imageVector = if (memo.isActive) {
                                 Icons.Outlined.TaskAlt
                             } else {
-                                Icons.Outlined.Undo
+                                Icons.AutoMirrored.Outlined.Undo
                             },
                             contentDescription = if (memo.isActive) "消除" else "重新提醒",
                         )

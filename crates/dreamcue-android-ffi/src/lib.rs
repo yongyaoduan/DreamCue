@@ -2,10 +2,10 @@ use std::ptr;
 use std::sync::Mutex;
 
 use anyhow::{anyhow, Context, Result};
+use dreamcue_core::MemoService;
 use jni::objects::{JClass, JString};
 use jni::sys::{jint, jlong, jstring};
 use jni::JNIEnv;
-use memo_core::MemoService;
 use serde::Serialize;
 
 type SharedService = Mutex<MemoService>;
@@ -23,7 +23,7 @@ struct ErrEnvelope {
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeInit(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeInit(
     mut env: JNIEnv,
     _class: JClass,
     db_path: JString,
@@ -42,7 +42,7 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeInit(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeDispose(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeDispose(
     _env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -62,7 +62,7 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeDispose(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeAddMemo(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeAddMemo(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -76,7 +76,7 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeAddMemo(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeUpdateMemo(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeUpdateMemo(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -92,7 +92,7 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeUpdateMemo(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeKeepMemo(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeKeepMemo(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -106,7 +106,7 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeKeepMemo(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeClearMemo(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeClearMemo(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -120,7 +120,7 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeClearMemo(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeReopenMemo(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeReopenMemo(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -134,7 +134,7 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeReopenMemo(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeDeleteMemo(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeDeleteMemo(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -148,37 +148,43 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeDeleteMemo(
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeListActiveMemos(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeListActiveMemos(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
 ) -> jstring {
-    let response = with_service_json(handle, || with_service(handle, |service| service.list_active_memos()));
+    let response = with_service_json(handle, || {
+        with_service(handle, |service| service.list_active_memos())
+    });
     to_jstring(&mut env, response)
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeListAllMemos(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeListAllMemos(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
 ) -> jstring {
-    let response = with_service_json(handle, || with_service(handle, |service| service.list_all_memos()));
+    let response = with_service_json(handle, || {
+        with_service(handle, |service| service.list_all_memos())
+    });
     to_jstring(&mut env, response)
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeReviewSnapshot(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeReviewSnapshot(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
 ) -> jstring {
-    let response = with_service_json(handle, || with_service(handle, |service| service.review_snapshot()));
+    let response = with_service_json(handle, || {
+        with_service(handle, |service| service.review_snapshot())
+    });
     to_jstring(&mut env, response)
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeSearchMemos(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeSearchMemos(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -187,13 +193,15 @@ pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeSearchMemos(
 ) -> jstring {
     let response = with_service_json(handle, || {
         let query = get_string(&mut env, query)?;
-        with_service(handle, |service| service.search_memos(&query, limit.max(1) as usize))
+        with_service(handle, |service| {
+            service.search_memos(&query, limit.max(1) as usize)
+        })
     });
     to_jstring(&mut env, response)
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_example_memolog_NativeBridge_nativeListEvents(
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeListEvents(
     mut env: JNIEnv,
     _class: JClass,
     handle: jlong,
@@ -210,18 +218,18 @@ fn with_service<T>(
     operation: impl FnOnce(&mut MemoService) -> Result<T>,
 ) -> Result<T> {
     if handle == 0 {
-        return Err(anyhow!("native memo service is not initialized"));
+        return Err(anyhow!("native DreamCue service is not initialized"));
     }
 
     let ptr = handle as *mut SharedService;
     if ptr.is_null() {
-        return Err(anyhow!("native memo service handle is null"));
+        return Err(anyhow!("native DreamCue service handle is null"));
     }
 
     let shared = unsafe { &*ptr };
     let mut service = shared
         .lock()
-        .map_err(|_| anyhow!("native memo service lock is poisoned"))?;
+        .map_err(|_| anyhow!("native DreamCue service lock is poisoned"))?;
     operation(&mut service)
 }
 
@@ -248,8 +256,9 @@ fn to_jstring(env: &mut JNIEnv, value: String) -> jstring {
 
 fn envelope_json<T: Serialize>(result: Result<T>) -> String {
     match result {
-        Ok(data) => serde_json::to_string(&data)
-            .unwrap_or_else(|err| fallback_error_json(format!("failed to serialize ok response: {err}"))),
+        Ok(data) => serde_json::to_string(&data).unwrap_or_else(|err| {
+            fallback_error_json(format!("failed to serialize ok response: {err}"))
+        }),
         Err(err) => fallback_error_json(format!("{:#}", err)),
     }
 }

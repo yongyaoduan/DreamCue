@@ -12,7 +12,7 @@ The project is split into three layers:
 
 ## Rust Core
 
-Path: [crates/memo-core/src/lib.rs](../crates/memo-core/src/lib.rs)
+Path: [crates/dreamcue-core/src/lib.rs](../crates/dreamcue-core/src/lib.rs)
 
 Responsibilities:
 
@@ -56,7 +56,7 @@ Responsibilities:
 
 ## Search
 
-Path: [crates/memo-core/src/search.rs](../crates/memo-core/src/search.rs)
+Path: [crates/dreamcue-core/src/search.rs](../crates/dreamcue-core/src/search.rs)
 
 The current search engine is local and deterministic. It combines:
 
@@ -70,7 +70,7 @@ This is enough for short memo text. Semantic search can replace this file later 
 
 ## JNI Bridge
 
-Path: [crates/memo-android-ffi/src/lib.rs](../crates/memo-android-ffi/src/lib.rs)
+Path: [crates/dreamcue-android-ffi/src/lib.rs](../crates/dreamcue-android-ffi/src/lib.rs)
 
 The Android layer calls Rust through JNI. Rust returns a JSON envelope, and Kotlin parses that response without duplicating business rules.
 
@@ -78,10 +78,10 @@ The Android layer calls Rust through JNI. Rust returns a JSON envelope, and Kotl
 
 Key files:
 
-- [android/app/src/main/java/com/example/memolog/MainActivity.kt](../android/app/src/main/java/com/example/memolog/MainActivity.kt)
-- [android/app/src/main/java/com/example/memolog/ui/MemoApp.kt](../android/app/src/main/java/com/example/memolog/ui/MemoApp.kt)
-- [android/app/src/main/java/com/example/memolog/worker/ReminderScheduler.kt](../android/app/src/main/java/com/example/memolog/worker/ReminderScheduler.kt)
-- [android/app/src/main/java/com/example/memolog/worker/DailyReviewReceiver.kt](../android/app/src/main/java/com/example/memolog/worker/DailyReviewReceiver.kt)
+- [android/app/src/main/java/app/dreamcue/MainActivity.kt](../android/app/src/main/java/app/dreamcue/MainActivity.kt)
+- [android/app/src/main/java/app/dreamcue/ui/DreamCueApp.kt](../android/app/src/main/java/app/dreamcue/ui/DreamCueApp.kt)
+- [android/app/src/main/java/app/dreamcue/worker/ReminderScheduler.kt](../android/app/src/main/java/app/dreamcue/worker/ReminderScheduler.kt)
+- [android/app/src/main/java/app/dreamcue/worker/DailyReviewReceiver.kt](../android/app/src/main/java/app/dreamcue/worker/DailyReviewReceiver.kt)
 
 Responsibilities:
 

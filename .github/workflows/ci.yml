@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_NDK_VERSION: "27.1.12297006"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Install Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ANDROID_NDK_VERSION"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Test Rust workspace
+        run: cargo test --workspace
+
+      - name: Build Android native libraries
+        run: ./scripts/build-rust-android.sh
+
+      - name: Test Android build
+        run: gradle -p android :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug
+
+  macos:
+    name: macOS
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Run macOS UI tests
+        run: xcodebuild -project macos/DreamCueMac.xcodeproj -scheme DreamCueMac -destination 'platform=macOS' test
+
+      - name: Validate release package script
+        run: DREAMCUE_RELEASE_VERSION=ci DREAMCUE_RELEASE_DIST_DIR="$RUNNER_TEMP/dreamcue-release" ./scripts/build-macos-release.sh

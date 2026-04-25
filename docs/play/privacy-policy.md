@@ -25,7 +25,7 @@ The Android version stores memo data locally on the device in `dreamcue.sqlite3`
 
 The macOS version stores memo data locally in the user's Application Support directory.
 
-If the user signs in, memo data is synced to Firebase Firestore under the authenticated Firebase user ID:
+If the user signs in, memo data is synced to Firebase Realtime Database under the authenticated Firebase user ID:
 
 ```text
 users/{uid}/memos/{memoId}

@@ -3,7 +3,7 @@
 These notes match the current codebase:
 
 - `android/app/src/main/AndroidManifest.xml` declares `android.permission.INTERNET` for Firebase sync.
-- Memo data is stored locally in `dreamcue.sqlite3` and can sync to Firestore after sign-in.
+- Memo data is stored locally in `dreamcue.sqlite3` and can sync to Realtime Database after sign-in.
 - `android:allowBackup` is set to `false` in `AndroidManifest.xml`.
 - Firebase Auth email/password login is implemented under `android/app/src/main/java/app/dreamcue/sync`.
 - There is no analytics SDK, ads SDK, or crash reporting dependency in `android/app/build.gradle.kts`.
@@ -16,7 +16,7 @@ Recommended answer for this version: `Yes`.
 
 Reasoning:
 
-- Memo content and timestamps can be uploaded to Firestore after the user signs in.
+- Memo content and timestamps can be uploaded to Realtime Database after the user signs in.
 - Firebase Auth processes the user's email/password credentials for account login.
 - Remote memo documents are scoped to `users/{uid}/memos`.
 - The App has no ads, analytics SDK, or crash reporting SDK.
@@ -48,7 +48,7 @@ The data is used for:
 - Local display in `DreamCueApp.kt`
 - Local search ranking in `crates/dreamcue-core/src/search.rs`
 - Local notification reminders through `NotificationHelper.kt`
-- Cross-device sync through Firebase Auth and Firestore
+- Cross-device sync through Firebase Auth and Realtime Database
 
 ## Remote Data
 
@@ -70,4 +70,4 @@ users/{uid}/memos/{memoId}
 
 - Users can clear a memo into History through `clear_memo`.
 - Users can permanently delete a memo and its related event history through `delete_memo`.
-- Remote deletion is propagated through a Firestore tombstone document with `deleted = true`.
+- Remote deletion is propagated through a Realtime Database tombstone record with `deleted = true`.

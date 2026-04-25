@@ -11,6 +11,7 @@ import app.dreamcue.model.Memo
 import app.dreamcue.model.ReminderTime
 import app.dreamcue.model.SearchResult
 import app.dreamcue.sync.FirebaseSyncCoordinator
+import app.dreamcue.sync.MemoSyncCoordinator
 import app.dreamcue.worker.NotificationHelper
 import app.dreamcue.worker.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
@@ -26,10 +27,6 @@ enum class MemoScreen(
     CURRENT(
         title = "Current Memos",
         subtitle = "Tap a memo to view details",
-    ),
-    SEARCH(
-        title = "Search Memos",
-        subtitle = "Enter keywords and run search",
     ),
     HISTORY(
         title = "History",
@@ -54,6 +51,7 @@ data class MainUiState(
     val historyMemos: List<Memo> = emptyList(),
     val searchResults: List<SearchResult> = emptyList(),
     val reminderTime: ReminderTime = ReminderTime.Default,
+    val reminderEnabled: Boolean = true,
     val isLoading: Boolean = false,
     val nativeReady: Boolean = false,
     val nativeError: String? = null,
@@ -74,13 +72,14 @@ private data class DashboardPayload(
 
 class DreamCueViewModel(
     private val repository: DreamCueRepository,
+    private val syncCoordinator: MemoSyncCoordinator = FirebaseSyncCoordinator(repository),
 ) : ViewModel() {
     private var detailAutoSaveJob: Job? = null
-    private val syncCoordinator = FirebaseSyncCoordinator(repository)
 
     var uiState by mutableStateOf(
         MainUiState(
             reminderTime = repository.reminderTime(),
+            reminderEnabled = repository.reminderEnabled(),
             nativeError = repository.nativeLoadError(),
         ),
     )
@@ -233,6 +232,7 @@ class DreamCueViewModel(
                     nativeError = null,
                     isLoading = false,
                     reminderTime = repository.reminderTime(),
+                    reminderEnabled = repository.reminderEnabled(),
                     syncEmail = syncCoordinator.currentEmail().ifBlank { uiState.syncEmail },
                 )
                 syncCoordinator.uploadAll(payload.currentMemos + payload.historyMemos)
@@ -266,7 +266,7 @@ class DreamCueViewModel(
         val query = uiState.searchQuery.trim()
         uiState = uiState.copy(
             submittedSearchQuery = query,
-            selectedScreen = MemoScreen.SEARCH,
+            selectedScreen = MemoScreen.HISTORY,
             searchResults = if (query.isBlank()) emptyList() else uiState.searchResults,
         )
         refresh()
@@ -327,8 +327,20 @@ class DreamCueViewModel(
     fun saveReminderTime(hour: Int, minute: Int) {
         val reminderTime = ReminderTime(hour, minute)
         repository.saveReminderTime(reminderTime)
-        ReminderScheduler.schedule(repository.appContext, reminderTime)
+        if (uiState.reminderEnabled) {
+            ReminderScheduler.schedule(repository.appContext, reminderTime)
+        }
         uiState = uiState.copy(reminderTime = reminderTime, errorMessage = null)
+    }
+
+    fun setReminderEnabled(enabled: Boolean) {
+        repository.saveReminderEnabled(enabled)
+        if (enabled) {
+            ReminderScheduler.schedule(repository.appContext, repository.reminderTime())
+        } else {
+            ReminderScheduler.cancel(repository.appContext)
+        }
+        uiState = uiState.copy(reminderEnabled = enabled, errorMessage = null)
     }
 
     override fun onCleared() {
@@ -408,6 +420,7 @@ class DreamCueViewModel(
 
             result.onSuccess { updatedMemo ->
                 applyUpdatedMemo(updatedMemo)
+                syncCoordinator.uploadAll(listOf(updatedMemo))
             }.onFailure { throwable ->
                 uiState = uiState.copy(
                     errorMessage = throwable.message ?: "Autosave failed",

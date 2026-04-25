@@ -25,7 +25,7 @@ Main features:
 - Search current and historical memos through `dreamcue-core`
 - Delete a memo and its event history from `memo_events`
 - Keep memo data locally in `dreamcue.sqlite3`
-- Sync memo data across signed-in devices with Firebase Auth and Firestore
+- Sync memo data across signed-in devices with Firebase Auth and Realtime Database
 
 Good use cases:
 

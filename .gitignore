@@ -9,5 +9,8 @@
 /android/keystore/
 /android/app/build/
 /android/app/src/main/jniLibs/
+/secrets/
+/android/firebase.local.properties
+/macos/DreamCueMac/FirebaseConfig.local.plist
 *.jks
 *.keystore

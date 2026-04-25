@@ -112,10 +112,20 @@ class DreamCueRepository(context: Context) {
         return ReminderTime(hour, minute)
     }
 
+    fun reminderEnabled(): Boolean {
+        return prefs.getBoolean(KEY_REMINDER_ENABLED, true)
+    }
+
     fun saveReminderTime(reminderTime: ReminderTime) {
         prefs.edit {
             putInt(KEY_HOUR, reminderTime.hour)
             putInt(KEY_MINUTE, reminderTime.minute)
+        }
+    }
+
+    fun saveReminderEnabled(enabled: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_REMINDER_ENABLED, enabled)
         }
     }
 
@@ -159,6 +169,7 @@ class DreamCueRepository(context: Context) {
     companion object {
         private const val KEY_HOUR = "reminder_hour"
         private const val KEY_MINUTE = "reminder_minute"
+        private const val KEY_REMINDER_ENABLED = "reminder_enabled"
     }
 }
 

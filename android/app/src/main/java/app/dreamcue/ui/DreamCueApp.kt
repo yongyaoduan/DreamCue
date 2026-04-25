@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -40,12 +42,9 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Button
@@ -61,8 +60,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -82,11 +82,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,7 +98,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.dreamcue.R
 import app.dreamcue.model.Memo
-import app.dreamcue.model.SearchResult
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -147,10 +148,11 @@ fun DreamCueApp(
     onSignInSync: () -> Unit,
     onCreateSyncAccount: () -> Unit,
     onSignOutSync: () -> Unit,
+    onReminderEnabledChange: (Boolean) -> Unit,
 ) {
     var showCaptureSheet by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
-    val showSearchResults =
+    val showArchiveSearchResults =
         state.submittedSearchQuery.isNotBlank() && state.submittedSearchQuery == state.searchQuery
 
     MaterialTheme(
@@ -199,22 +201,18 @@ fun DreamCueApp(
                             onOpenMemo = onOpenMemoDetail,
                         )
 
-                        MemoScreen.SEARCH -> RecallScreen(
-                            state = state,
-                            showSearchResults = showSearchResults,
-                            onSearchQueryChange = onSearchQueryChange,
-                            onRunSearch = onRunSearch,
-                            onOpenMemo = onOpenMemoDetail,
-                        )
-
                         MemoScreen.HISTORY -> ArchiveScreen(
                             state = state,
+                            showSearchResults = showArchiveSearchResults,
+                            onSearchQueryChange = onSearchQueryChange,
+                            onRunSearch = onRunSearch,
                             onOpenMemo = onOpenMemoDetail,
                         )
 
                         MemoScreen.REMINDER -> RhythmScreen(
                             state = state,
                             onOpenTimePicker = { showTimePicker = true },
+                            onReminderEnabledChange = onReminderEnabledChange,
                         )
 
                         MemoScreen.ACCOUNT -> AccountScreen(
@@ -356,91 +354,20 @@ private fun TodayScreen(
 }
 
 @Composable
-private fun RecallScreen(
+private fun ArchiveScreen(
     state: MainUiState,
     showSearchResults: Boolean,
     onSearchQueryChange: (String) -> Unit,
     onRunSearch: () -> Unit,
     onOpenMemo: (Memo) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize(),
-        contentPadding = ScreenPadding,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item {
-            AppHeader(
-                title = "Recall",
-                subtitle = "Ask or search anything.",
-                trailing = { IconBadge(Icons.Outlined.Search, "Search") },
-            )
-        }
+    val archiveMemos = state.historyMemos.sortedByDescending { it.updatedAtMs }
+    val archiveSearchResults = state.searchResults
+        .map { it.memo }
+        .filter { !it.isActive }
+        .distinctBy { it.id }
+    val resultLabel = "${archiveSearchResults.size} archived ${if (archiveSearchResults.size == 1) "cue" else "cues"}"
 
-        item {
-            ElevatedPanel {
-                OutlinedTextField(
-                    value = state.searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Ask or search anything") },
-                    placeholder = { Text("Example: Firebase billing, dentist, release notes") },
-                    singleLine = true,
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Outlined.Search,
-                            contentDescription = null,
-                        )
-                    },
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    PrimaryButton(
-                        text = "Run Search",
-                        onClick = onRunSearch,
-                    )
-                }
-            }
-        }
-
-        if (showSearchResults) {
-            item {
-                SectionTitle(
-                    title = "Top Matches",
-                    subtitle = "${state.searchResults.size} relevance-ranked cues",
-                )
-            }
-            if (state.searchResults.isEmpty()) {
-                item {
-                    EmptyPanel("No matching cues found")
-                }
-            } else {
-                items(items = state.searchResults, key = { "recall-${it.memo.id}" }) { result ->
-                    SearchResultCueCard(
-                        result = result,
-                        onOpen = { onOpenMemo(result.memo) },
-                    )
-                }
-            }
-        } else {
-            item {
-                NoticePanel(
-                    title = "Search memory, not folders",
-                    content = "Recall looks across active cues and archive entries.",
-                    tone = Forest.copy(alpha = 0.08f),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArchiveScreen(
-    state: MainUiState,
-    onOpenMemo: (Memo) -> Unit,
-) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize(),
@@ -451,23 +378,70 @@ private fun ArchiveScreen(
             AppHeader(
                 title = "Archive",
                 subtitle = "Completed cues stay searchable.",
-                trailing = { IconBadge(Icons.Outlined.Archive, "Archive") },
             )
         }
 
         item {
-            SectionTitle(
-                title = "Completed Cues",
-                subtitle = "${state.historyMemos.size} archived items",
-            )
+            ElevatedPanel {
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search archive") },
+                    placeholder = { Text("Release notes, dentist, Firebase") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onRunSearch() }),
+                    trailingIcon = {
+                        IconButton(onClick = onRunSearch) {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = "Run archive search",
+                                tint = Forest,
+                            )
+                        }
+                    },
+                )
+            }
         }
 
-        if (state.historyMemos.isEmpty()) {
+        if (showSearchResults) {
+            item {
+                SectionTitle(
+                    title = "Search Results",
+                    subtitle = resultLabel,
+                )
+            }
+            if (archiveSearchResults.isEmpty()) {
+                item {
+                    EmptyPanel("No archived cues found")
+                }
+            } else {
+                items(items = archiveSearchResults, key = { "archive-search-${it.id}" }) { memo ->
+                    SearchResultCueCard(
+                        memo = memo,
+                        onOpen = { onOpenMemo(memo) },
+                    )
+                }
+            }
+        } else if (archiveMemos.isEmpty()) {
+            item {
+                SectionTitle(
+                    title = "All History",
+                    subtitle = "0 archived cues",
+                )
+            }
             item {
                 EmptyPanel("No completed cues yet")
             }
         } else {
-            items(items = state.historyMemos, key = { "archive-${it.id}" }) { memo ->
+            item {
+                SectionTitle(
+                    title = "All History",
+                    subtitle = "${archiveMemos.size} archived ${if (archiveMemos.size == 1) "cue" else "cues"}",
+                )
+            }
+            items(items = archiveMemos, key = { "archive-${it.id}" }) { memo ->
                 TimelineCue(
                     memo = memo,
                     onOpen = { onOpenMemo(memo) },
@@ -481,6 +455,7 @@ private fun ArchiveScreen(
 private fun RhythmScreen(
     state: MainUiState,
     onOpenTimePicker: () -> Unit,
+    onReminderEnabledChange: (Boolean) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -492,7 +467,6 @@ private fun RhythmScreen(
             AppHeader(
                 title = "Reminder Rhythm",
                 subtitle = "A quiet daily return point.",
-                trailing = { IconBadge(Icons.Outlined.NotificationsNone, "Reminder") },
             )
         }
 
@@ -516,7 +490,30 @@ private fun RhythmScreen(
                             fontWeight = FontWeight.Medium,
                         )
                     }
-                    StatusChip("Enabled", Forest)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (state.reminderEnabled) "On" else "Off",
+                            color = InkSoft,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Switch(
+                            checked = state.reminderEnabled,
+                            onCheckedChange = onReminderEnabledChange,
+                            modifier = Modifier.semantics {
+                                contentDescription = "Daily reminder switch"
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Porcelain,
+                                checkedTrackColor = Forest,
+                                uncheckedThumbColor = Porcelain,
+                                uncheckedTrackColor = Stone,
+                            ),
+                        )
+                    }
                 }
                 Text(
                     text = state.reminderTime.asText(),
@@ -542,10 +539,6 @@ private fun RhythmScreen(
                     )
                 }
             }
-        }
-
-        item {
-            QuietHoursPanel()
         }
 
         item {
@@ -577,7 +570,6 @@ private fun AccountScreen(
             AppHeader(
                 title = "Account",
                 subtitle = if (signedIn) "Private sync is active." else "Private sync across devices.",
-                trailing = { IconBadge(Icons.Outlined.Lock, "Private") },
             )
         }
 
@@ -592,7 +584,7 @@ private fun AccountScreen(
             item {
                 NoticePanel(
                     title = "Sync Health",
-                    content = "Firestore listener is receiving account-owned cue changes only.",
+                    content = "Cue changes stay private to this account and sync automatically.",
                     tone = Forest.copy(alpha = 0.08f),
                 )
             }
@@ -627,14 +619,18 @@ private fun AccountScreen(
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        TextButton(onClick = onCreateSyncAccount) {
-                            Text("Create")
-                        }
+                        SecondaryButton(
+                            text = "Create",
+                            onClick = onCreateSyncAccount,
+                            modifier = Modifier.weight(1f),
+                        )
                         PrimaryButton(
                             text = "Sign In",
                             onClick = onSignInSync,
+                            modifier = Modifier.weight(1f),
+                            trailingIcon = Icons.Outlined.Lock,
                         )
                     }
                 }
@@ -643,7 +639,7 @@ private fun AccountScreen(
             item {
                 NoticePanel(
                     title = "Tenant-scoped privacy",
-                    content = "Remote cues are isolated under users/{uid}/memos for the authenticated account.",
+                    content = "Cue sync stays private to the signed-in account.",
                     tone = Brass.copy(alpha = 0.15f),
                 )
             }
@@ -718,33 +714,24 @@ private fun NavItem(
 private fun AppHeader(
     title: String,
     subtitle: String,
-    trailing: @Composable () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontFamily = FontFamily.Serif,
-                fontSize = 24.sp,
-                lineHeight = 28.sp,
-                color = Ink,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = subtitle,
-                color = InkSoft,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(top = 3.dp),
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        trailing()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            fontFamily = FontFamily.Serif,
+            fontSize = 24.sp,
+            lineHeight = 28.sp,
+            color = Ink,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = subtitle,
+            color = InkSoft,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(top = 3.dp),
+        )
     }
 }
 
@@ -755,19 +742,6 @@ private fun HomeTopBar() {
             .fillMaxWidth()
             .height(44.dp),
     ) {
-        IconButton(
-            onClick = {},
-            modifier = Modifier
-                .size(38.dp)
-                .align(Alignment.CenterStart),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Menu,
-                contentDescription = "DreamCue menu",
-                tint = InkSoft,
-                modifier = Modifier.size(19.dp),
-            )
-        }
         Text(
             text = "DreamCue",
             modifier = Modifier.align(Alignment.Center),
@@ -777,19 +751,6 @@ private fun HomeTopBar() {
             lineHeight = 22.sp,
             fontWeight = FontWeight.Medium,
         )
-        IconButton(
-            onClick = {},
-            modifier = Modifier
-                .size(38.dp)
-                .align(Alignment.CenterEnd),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.NotificationsNone,
-                contentDescription = "Reminder notification",
-                tint = InkSoft,
-                modifier = Modifier.size(19.dp),
-            )
-        }
     }
 }
 
@@ -1114,11 +1075,10 @@ private fun CueCard(
 
 @Composable
 private fun SearchResultCueCard(
-    result: SearchResult,
+    memo: Memo,
     onOpen: () -> Unit,
 ) {
-    val label = if (result.memo.isActive) "Current" else "History"
-    val score = result.score.coerceIn(0.0, 1.0).toFloat().coerceAtLeast(0.18f)
+    val label = if (memo.isActive) "Current" else "History"
 
     ElevatedPanel(
         modifier = Modifier.clickable(onClick = onOpen),
@@ -1141,7 +1101,7 @@ private fun SearchResultCueCard(
                     verticalAlignment = Alignment.Top,
                 ) {
                     Text(
-                        text = result.memo.content,
+                        text = memo.content,
                         color = Ink,
                         fontSize = 15.sp,
                         lineHeight = 19.sp,
@@ -1151,33 +1111,16 @@ private fun SearchResultCueCard(
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
-                    StatusChip(label, if (result.memo.isActive) Forest else Brass)
+                    StatusChip(label, if (memo.isActive) Forest else Brass)
                 }
                 Text(
-                    text = result.matchedBy.joinToString().ifBlank { memoSummaryLine(result.memo) },
+                    text = memoSummaryLine(memo),
                     color = InkSoft,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = 7.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Box(
-                    modifier = Modifier
-                        .padding(top = 10.dp)
-                        .fillMaxWidth()
-                        .height(5.dp)
-                        .background(Stone, RoundedCornerShape(999.dp)),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(score)
-                            .fillMaxHeight()
-                            .background(
-                                Brush.horizontalGradient(listOf(Forest, Brass)),
-                                RoundedCornerShape(999.dp),
-                            ),
-                    )
-                }
             }
         }
     }
@@ -1230,9 +1173,9 @@ private fun TimelineCue(
                     )
                 }
                 Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.Undo,
-                    contentDescription = "Restore",
-                    tint = Forest,
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = InkSoft,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -1267,33 +1210,6 @@ private fun FirstCuePanel(onOpenCapture: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
             PrimaryButton(text = "Write your first cue", onClick = onOpenCapture)
-        }
-    }
-}
-
-@Composable
-private fun QuietHoursPanel() {
-    ElevatedPanel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(
-                    text = "Quiet hours",
-                    color = Ink,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "23:00 - 07:00",
-                    color = InkSoft,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            SoftSwitch(enabled = true)
         }
     }
 }
@@ -1349,37 +1265,47 @@ private fun ConnectedAccountPanel(
     syncStatus: String,
     onSignOutSync: () -> Unit,
 ) {
+    val displayEmail = compactAccountEmail(email)
+    val displayStatus = accountSyncStatusLabel(syncStatus)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Forest,
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(24.dp),
         shadowElevation = 10.dp,
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.padding(17.dp),
+            verticalArrangement = Arrangement.spacedBy(13.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top,
             ) {
-                Column {
-                    StatusChip("Tenant scoped", Porcelain, dark = true)
+                Column(modifier = Modifier.weight(1f)) {
+                    StatusChip("Tenant-scoped", Porcelain, dark = true)
                     Text(
-                        text = email,
+                        text = displayEmail,
                         color = Porcelain,
-                        fontSize = 22.sp,
+                        fontSize = 19.sp,
+                        lineHeight = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 14.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 13.dp),
                     )
                     Text(
-                        text = syncStatus,
+                        text = displayStatus,
                         color = Porcelain.copy(alpha = 0.72f),
                         fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 5.dp),
                     )
                 }
+                Spacer(modifier = Modifier.width(12.dp))
                 Icon(
                     imageVector = Icons.Outlined.Sync,
                     contentDescription = null,
@@ -1390,13 +1316,27 @@ private fun ConnectedAccountPanel(
                         .padding(12.dp),
                 )
             }
-            AccountMetaLine("Remote path", "users/{uid}/memos")
-            AccountMetaLine("Last sync", "just now")
-            AccountMetaLine("Pending uploads", "0")
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Column {
+                    Text(
+                        text = "Last sync",
+                        color = Porcelain.copy(alpha = 0.68f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "just now",
+                        color = Porcelain,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
                 OutlinedButton(
                     onClick = onSignOutSync,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
@@ -1409,15 +1349,33 @@ private fun ConnectedAccountPanel(
     }
 }
 
-@Composable
-private fun AccountMetaLine(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+private fun compactAccountEmail(email: String): String {
+    val trimmed = email.trim()
+    if (trimmed.length <= 28) {
+        return trimmed
+    }
+
+    val parts = trimmed.split("@", limit = 2)
+    if (parts.size != 2) {
+        return "${trimmed.take(20)}...${trimmed.takeLast(6)}"
+    }
+
+    val local = parts[0]
+    val domain = parts[1]
+    val compactLocal = if (local.length > 12) "${local.take(12)}..." else local
+    val compactDomain = if (domain.length > 18) "${domain.take(7)}...${domain.takeLast(8)}" else domain
+    return "$compactLocal@$compactDomain"
+}
+
+private fun accountSyncStatusLabel(syncStatus: String): String {
+    return if (
+        syncStatus.startsWith("Syncing as ") ||
+        syncStatus == "Sync account signed in." ||
+        syncStatus == "Sync account created."
     ) {
-        Text(text = label, color = Porcelain.copy(alpha = 0.68f), fontSize = 12.sp)
-        Text(text = value, color = Porcelain, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        "Realtime sync is active."
+    } else {
+        syncStatus
     }
 }
 
@@ -1449,9 +1407,7 @@ private fun CaptureSheet(
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 )
-                TextButton(onClick = onSave) {
-                    Text("Save")
-                }
+                Spacer(modifier = Modifier.size(48.dp))
             }
             OutlinedTextField(
                 value = draft,
@@ -1470,19 +1426,6 @@ private fun CaptureSheet(
                 MetadataChip(Icons.Outlined.Lock, "Private")
                 MetadataChip(Icons.Outlined.Archive, "Stored locally")
                 MetadataChip(Icons.Outlined.NotificationsNone, "${300 - draft.length}/300")
-            }
-            Surface(
-                color = Ivory,
-                shape = RoundedCornerShape(22.dp),
-                border = BorderStroke(1.dp, Line.copy(alpha = 0.72f)),
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(text = "Add details", color = Ink, fontWeight = FontWeight.Bold)
-                    Text(text = "Context and timing can stay optional.", color = InkSoft, fontSize = 13.sp)
-                }
             }
             PrimaryButton(
                 text = "Save Cue",
@@ -1531,15 +1474,21 @@ private fun ReminderTimePickerSheet(
                 WheelColumn(
                     values = hourWheelValues(selectedHour),
                     selected = selectedHour,
+                    contentDescription = "Hour picker",
                     label = { it.toString().padStart(2, '0') },
                     onSelect = { selectedHour = it },
+                    onSwipeUp = { selectedHour = (selectedHour + 1) % 24 },
+                    onSwipeDown = { selectedHour = (selectedHour + 23) % 24 },
                     modifier = Modifier.weight(1f),
                 )
                 WheelColumn(
                     values = minuteWheelValues(selectedMinute),
                     selected = selectedMinute,
+                    contentDescription = "Minute picker",
                     label = { it.toString().padStart(2, '0') },
                     onSelect = { selectedMinute = it },
+                    onSwipeUp = { selectedMinute = (selectedMinute + 5) % 60 },
+                    onSwipeDown = { selectedMinute = (selectedMinute + 55) % 60 },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -1558,8 +1507,11 @@ private fun ReminderTimePickerSheet(
 private fun WheelColumn(
     values: List<Int>,
     selected: Int,
+    contentDescription: String,
     label: (Int) -> String,
     onSelect: (Int) -> Unit,
+    onSwipeUp: () -> Unit,
+    onSwipeDown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1567,7 +1519,26 @@ private fun WheelColumn(
             .height(168.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(Color(0xFFF1EADF))
-            .border(1.dp, Line, RoundedCornerShape(24.dp)),
+            .border(1.dp, Line, RoundedCornerShape(24.dp))
+            .semantics {
+                this.contentDescription = contentDescription
+            }
+            .pointerInput(selected) {
+                var dragDistance = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { dragDistance = 0f },
+                    onVerticalDrag = { _, dragAmount ->
+                        dragDistance += dragAmount
+                    },
+                    onDragEnd = {
+                        if (dragDistance < -28f) {
+                            onSwipeUp()
+                        } else if (dragDistance > 28f) {
+                            onSwipeDown()
+                        }
+                    },
+                )
+            },
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -1611,19 +1582,11 @@ private fun MemoDetailDialog(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Outlined.Close, contentDescription = "Close")
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Outlined.StarBorder, contentDescription = "Favorite")
-                    }
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Outlined.MoreVert, contentDescription = "More")
-                    }
                 }
             }
             Text(
@@ -1654,26 +1617,57 @@ private fun MemoDetailDialog(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                SecondaryButton(
-                    text = "Delete",
+                DetailActionButton(
+                    contentDescription = "Delete cue",
+                    icon = Icons.Outlined.DeleteOutline,
                     onClick = onDelete,
-                    modifier = Modifier.weight(1f),
                     color = Clay,
+                    modifier = Modifier.weight(1f),
                 )
-                SecondaryButton(
-                    text = if (memo.isActive) "Remind Later" else "Keep",
+                DetailActionButton(
+                    contentDescription = "Keep cue",
+                    icon = Icons.Outlined.NotificationsNone,
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
-                PrimaryButton(
-                    text = if (memo.isActive) "Complete" else "Restore",
+                DetailActionButton(
+                    contentDescription = if (memo.isActive) "Complete cue" else "Restore cue",
+                    icon = if (memo.isActive) Icons.Outlined.TaskAlt else Icons.AutoMirrored.Outlined.Undo,
                     onClick = onPrimaryAction,
                     modifier = Modifier.weight(1f),
-                    trailingIcon = if (memo.isActive) Icons.Outlined.TaskAlt else Icons.AutoMirrored.Outlined.Undo,
+                    filled = true,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DetailActionButton(
+    contentDescription: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    color: Color = Forest,
+    filled: Boolean = false,
+) {
+    Surface(
+        modifier = modifier
+            .height(50.dp)
+            .clip(RoundedCornerShape(16.dp)),
+        color = if (filled) color else color.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(16.dp),
+        onClick = onClick,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = if (filled) Porcelain else color,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
@@ -1691,34 +1685,19 @@ private fun DeleteConfirmSheet(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Delete this memo?",
-                        color = Ink,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = "This cue and its event history will be permanently removed from local storage and remote sync.",
-                        color = InkSoft,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = null,
-                    tint = Clay,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(Clay.copy(alpha = 0.10f), CircleShape)
-                        .padding(10.dp),
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Delete this memo?",
+                    color = Ink,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "This cue and its event history will be permanently removed from local storage and remote sync.",
+                    color = InkSoft,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
             ElevatedPanel(
@@ -1809,11 +1788,25 @@ private fun NoticePanel(
     tone: Color,
 ) {
     ElevatedPanel(
-        color = tone,
+        color = Porcelain,
         contentPadding = PaddingValues(15.dp),
     ) {
-        Text(text = title, color = Ink, fontWeight = FontWeight.Bold)
-        Text(text = content, color = InkSoft, fontSize = 14.sp, lineHeight = 20.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(42.dp)
+                    .background(tone, RoundedCornerShape(999.dp)),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text(text = title, color = Ink, fontWeight = FontWeight.Bold)
+                Text(text = content, color = InkSoft, fontSize = 14.sp, lineHeight = 20.sp)
+            }
+        }
     }
 }
 
@@ -1934,22 +1927,6 @@ private fun MetadataChip(icon: ImageVector, text: String) {
 }
 
 @Composable
-private fun IconBadge(icon: ImageVector, description: String) {
-    Surface(
-        modifier = Modifier.size(38.dp),
-        shape = CircleShape,
-        color = ForestSoft,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = description,
-            tint = DeepForest,
-            modifier = Modifier.padding(9.dp),
-        )
-    }
-}
-
-@Composable
 private fun SmallMarker(color: Color) {
     Box(
         modifier = Modifier
@@ -1963,27 +1940,6 @@ private fun SmallMarker(color: Color) {
                 .size(5.dp)
                 .background(color, CircleShape),
         )
-    }
-}
-
-@Composable
-private fun SoftSwitch(enabled: Boolean) {
-    Surface(
-        color = if (enabled) Forest else Stone,
-        shape = RoundedCornerShape(999.dp),
-        modifier = Modifier.size(width = 46.dp, height = 28.dp),
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = if (enabled) Alignment.CenterEnd else Alignment.CenterStart,
-        ) {
-            Box(
-                modifier = Modifier
-                    .padding(4.dp)
-                    .size(20.dp)
-                    .background(Porcelain, CircleShape),
-            )
-        }
     }
 }
 
@@ -2013,7 +1969,6 @@ private fun FlowLine(label: String, value: String) {
 private fun MemoScreen.navLabel(): String {
     return when (this) {
         MemoScreen.CURRENT -> "Today"
-        MemoScreen.SEARCH -> "Recall"
         MemoScreen.HISTORY -> "Archive"
         MemoScreen.REMINDER -> "Rhythm"
         MemoScreen.ACCOUNT -> "Account"
@@ -2023,7 +1978,6 @@ private fun MemoScreen.navLabel(): String {
 private fun MemoScreen.icon(): ImageVector {
     return when (this) {
         MemoScreen.CURRENT -> Icons.Outlined.Home
-        MemoScreen.SEARCH -> Icons.Outlined.Search
         MemoScreen.HISTORY -> Icons.Outlined.Archive
         MemoScreen.REMINDER -> Icons.Outlined.Schedule
         MemoScreen.ACCOUNT -> Icons.Outlined.AccountCircle

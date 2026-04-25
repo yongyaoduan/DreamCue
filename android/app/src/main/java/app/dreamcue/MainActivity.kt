@@ -23,7 +23,11 @@ class MainActivity : ComponentActivity() {
         NotificationHelper.ensureChannel(this)
 
         val repository = DreamCueRepository(applicationContext)
-        ReminderScheduler.schedule(this, repository.reminderTime())
+        if (repository.reminderEnabled()) {
+            ReminderScheduler.schedule(this, repository.reminderTime())
+        } else {
+            ReminderScheduler.cancel(this)
+        }
 
         setContent {
             val viewModel: DreamCueViewModel = viewModel(
@@ -51,6 +55,7 @@ class MainActivity : ComponentActivity() {
                 onSignInSync = viewModel::signInSync,
                 onCreateSyncAccount = viewModel::createSyncAccount,
                 onSignOutSync = viewModel::signOutSync,
+                onReminderEnabledChange = viewModel::setReminderEnabled,
             )
         }
     }
@@ -58,6 +63,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         val repository = DreamCueRepository(applicationContext)
-        ReminderScheduler.schedule(this, repository.reminderTime())
+        if (repository.reminderEnabled()) {
+            ReminderScheduler.schedule(this, repository.reminderTime())
+        } else {
+            ReminderScheduler.cancel(this)
+        }
     }
 }

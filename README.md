@@ -10,7 +10,7 @@ DreamCue is a memo reminder App with local-first storage and optional Firebase s
 - Move cleared memos to History so they no longer enter daily reminders.
 - Record create, edit, keep, clear, and reopen events.
 - Search current and historical memos.
-- Sync memos across Android and macOS through Firebase Auth and Firestore.
+- Sync memos across Android and macOS through Firebase Auth and Realtime Database.
 - Keep remote data tenant-scoped under `users/{uid}/memos`.
 
 ## Project Layout
@@ -18,7 +18,7 @@ DreamCue is a memo reminder App with local-first storage and optional Firebase s
 - `crates/dreamcue-core`: Rust core for SQLite storage, event logs, daily review queues, and search.
 - `crates/dreamcue-android-ffi`: Rust JNI bridge that returns JSON to Android.
 - `android/`: Android App with Compose UI, notification permission handling, alarm scheduling, and boot rescheduling.
-- `macos/`: macOS SwiftUI App with local JSON storage, Firebase Auth REST login, and Firestore REST sync polling.
+- `macos/`: macOS SwiftUI App with local JSON storage, Firebase Auth REST login, and Realtime Database REST sync polling.
 - `docs/architecture.md`: Architecture notes.
 - `scripts/build-rust-android.sh`: Android native library build script.
 
@@ -63,20 +63,20 @@ Android reads Firebase configuration from these string resources:
 - `firebase_project_id`
 - `firebase_application_id`
 - `firebase_api_key`
+- `firebase_database_url`
 
 macOS reads Firebase configuration from `macos/DreamCueMac/FirebaseConfig.plist`:
 
 - `ProjectID`
 - `APIKey`
+- `DatabaseURL`
 
 Both clients require Firebase Auth email/password sign-in. All synced memos are written under `users/{uid}/memos`, where `uid` is the authenticated Firebase user ID.
 
-Use Firestore rules equivalent to:
+Use Realtime Database rules equivalent to [database.rules.json](database.rules.json).
 
 ```text
-match /users/{userId}/memos/{memoId} {
-  allow read, write: if request.auth != null && request.auth.uid == userId;
-}
+users/$uid: auth != null && auth.uid === $uid
 ```
 
 ## Test
@@ -97,7 +97,7 @@ xcodebuild -project macos/DreamCueMac.xcodeproj -scheme DreamCueMac -configurati
 ## Current State
 
 - The Rust core covers memo lifecycle, event logs, daily review queues, and search.
-- The Android shell covers the base UI, notification permission request, daily reminder scheduling, boot rescheduling, Firebase Auth, and Firestore sync.
-- The macOS shell covers local memo CRUD, search, Firebase Auth REST login, and Firestore REST sync polling.
+- The Android shell covers the base UI, notification permission request, daily reminder scheduling, boot rescheduling, Firebase Auth, and Realtime Database sync.
+- The macOS shell covers local memo CRUD, search, Firebase Auth REST login, and Realtime Database REST sync polling.
 - Search is currently a deterministic hybrid search with exact matching, character n-grams, phrase similarity, and synonym hints.
 - Semantic search can be added in `crates/dreamcue-core/src/search.rs` with local embedding or server-side embedding.

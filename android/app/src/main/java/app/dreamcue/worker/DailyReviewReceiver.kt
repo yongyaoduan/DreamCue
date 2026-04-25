@@ -17,7 +17,12 @@ class DailyReviewReceiver : BroadcastReceiver() {
 
         Thread {
             val repository = DreamCueRepository(appContext)
+            val reminderEnabled = repository.reminderEnabled()
             try {
+                if (!reminderEnabled) {
+                    ReminderScheduler.cancel(appContext)
+                    return@Thread
+                }
                 Log.d(TAG, "Received reminder broadcast: action=${intent?.action}")
                 val initialized = repository.initialize()
                 if (initialized.isSuccess) {
@@ -30,8 +35,13 @@ class DailyReviewReceiver : BroadcastReceiver() {
                     Log.w(TAG, "Repository init failed", initialized.exceptionOrNull())
                 }
             } finally {
+                val reminderTime = repository.reminderTime()
                 repository.dispose()
-                ReminderScheduler.schedule(appContext, repository.reminderTime())
+                if (reminderEnabled) {
+                    ReminderScheduler.schedule(appContext, reminderTime)
+                } else {
+                    ReminderScheduler.cancel(appContext)
+                }
                 pendingResult.finish()
             }
         }.start()

@@ -15,6 +15,14 @@ val releaseKeystoreProperties = Properties().apply {
 }
 
 val hasReleaseSigning = releaseKeystoreProperties.isNotEmpty()
+val firebaseLocalProperties = Properties().apply {
+    val firebasePropsFile = rootProject.file("firebase.local.properties")
+    if (firebasePropsFile.exists()) {
+        FileInputStream(firebasePropsFile).use(::load)
+    }
+}
+
+fun String.asBuildConfigString(): String = "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
     namespace = "app.dreamcue"
@@ -25,10 +33,30 @@ android {
         applicationId = "app.dreamcue"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "String",
+            "FIREBASE_PROJECT_ID",
+            (firebaseLocalProperties.getProperty("firebaseProjectId") ?: "").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_APPLICATION_ID",
+            (firebaseLocalProperties.getProperty("firebaseApplicationId") ?: "").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_API_KEY",
+            (firebaseLocalProperties.getProperty("firebaseApiKey") ?: "").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "FIREBASE_DATABASE_URL",
+            (firebaseLocalProperties.getProperty("firebaseDatabaseUrl") ?: "").asBuildConfigString(),
+        )
     }
 
     signingConfigs {
@@ -66,6 +94,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -98,7 +127,7 @@ dependencies {
 
     implementation(firebaseBom)
     implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-database")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

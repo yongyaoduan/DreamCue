@@ -1,34 +1,62 @@
 package app.dreamcue.sync
 
 import android.content.Context
+import app.dreamcue.BuildConfig
 import app.dreamcue.DreamCueRepository
 import app.dreamcue.R
 import app.dreamcue.model.Memo
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.DocumentChange
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+
+interface MemoSyncCoordinator {
+    fun currentEmail(): String
+    fun start(
+        onStatus: (String) -> Unit,
+        onRemoteChange: () -> Unit,
+    )
+    fun signIn(
+        email: String,
+        password: String,
+        onStatus: (String) -> Unit,
+        onRemoteChange: () -> Unit,
+    )
+    fun createAccount(
+        email: String,
+        password: String,
+        onStatus: (String) -> Unit,
+        onRemoteChange: () -> Unit,
+    )
+    fun signOut(onStatus: (String) -> Unit)
+    fun uploadAll(memos: List<Memo>)
+    fun uploadDeletedMemo(memoId: String, deletedAtMs: Long = System.currentTimeMillis())
+    fun stop()
+}
 
 class FirebaseSyncCoordinator(
     private val repository: DreamCueRepository,
-) {
+) : MemoSyncCoordinator {
     private val appContext: Context = repository.appContext
-    private var listenerRegistration: ListenerRegistration? = null
+    private var memoReference: DatabaseReference? = null
+    private var valueEventListener: ValueEventListener? = null
 
-    fun currentEmail(): String {
+    override fun currentEmail(): String {
         val auth = authOrNull() ?: return ""
         return auth.currentUser?.email ?: ""
     }
 
-    fun start(
+    override fun start(
         onStatus: (String) -> Unit,
         onRemoteChange: () -> Unit,
     ) {
         val auth = authOrNull()
-        val firestore = firestoreOrNull()
-        if (auth == null || firestore == null) {
+        val database = databaseOrNull()
+        if (auth == null || database == null) {
             onStatus("Firebase sync is not configured.")
             return
         }
@@ -41,30 +69,31 @@ class FirebaseSyncCoordinator(
         }
 
         val path = FirebaseTenantPaths.memoCollectionPath(user.uid)
-        listenerRegistration?.remove()
-        listenerRegistration = firestore.collection(path).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                onStatus(error.message ?: "Sync listener failed.")
-                return@addSnapshotListener
-            }
-            if (snapshot == null) {
-                return@addSnapshotListener
-            }
-
-            for (change in snapshot.documentChanges) {
+        stop()
+        val reference = database.getReference(path)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
                 runCatching {
                     repository.initialize().getOrThrow()
-                    applyRemoteChange(change)
+                    applyRemoteSnapshot(snapshot)
                 }.onFailure { failure ->
                     onStatus(failure.message ?: "Remote sync failed.")
+                    return
                 }
+                onStatus("Syncing as ${user.email ?: user.uid}.")
+                onRemoteChange()
             }
-            onStatus("Syncing as ${user.email ?: user.uid}.")
-            onRemoteChange()
+
+            override fun onCancelled(error: DatabaseError) {
+                onStatus(error.message.ifBlank { "Sync listener failed." })
+            }
         }
+        reference.addValueEventListener(listener)
+        memoReference = reference
+        valueEventListener = listener
     }
 
-    fun signIn(
+    override fun signIn(
         email: String,
         password: String,
         onStatus: (String) -> Unit,
@@ -81,11 +110,11 @@ class FirebaseSyncCoordinator(
                 start(onStatus, onRemoteChange)
             }
             .addOnFailureListener { error ->
-                onStatus(error.message ?: "Sync sign-in failed.")
+                onStatus(firebaseSyncFailureMessage(error, "Sync sign-in failed."))
             }
     }
 
-    fun createAccount(
+    override fun createAccount(
         email: String,
         password: String,
         onStatus: (String) -> Unit,
@@ -102,65 +131,58 @@ class FirebaseSyncCoordinator(
                 start(onStatus, onRemoteChange)
             }
             .addOnFailureListener { error ->
-                onStatus(error.message ?: "Sync account creation failed.")
+                onStatus(firebaseSyncFailureMessage(error, "Sync account creation failed."))
             }
     }
 
-    fun signOut(onStatus: (String) -> Unit) {
-        listenerRegistration?.remove()
-        listenerRegistration = null
+    override fun signOut(onStatus: (String) -> Unit) {
+        stop()
         authOrNull()?.signOut()
         onStatus("Sync account signed out.")
     }
 
-    fun uploadAll(memos: List<Memo>) {
+    override fun uploadAll(memos: List<Memo>) {
         for (memo in memos) {
             uploadMemo(memo)
         }
     }
 
-    fun uploadDeletedMemo(memoId: String, deletedAtMs: Long = System.currentTimeMillis()) {
-        val firestore = firestoreOrNull() ?: return
+    override fun uploadDeletedMemo(memoId: String, deletedAtMs: Long) {
+        val database = databaseOrNull() ?: return
         val userId = authOrNull()?.currentUser?.uid ?: return
         val document = RemoteMemoDocument.deletedMemo(memoId, deletedAtMs)
-        firestore.collection(FirebaseTenantPaths.memoCollectionPath(userId))
-            .document(memoId)
-            .set(document.toMap())
+        database.getReference(FirebaseTenantPaths.memoDocumentPath(userId, memoId))
+            .setValue(document.toMap())
     }
 
-    fun stop() {
-        listenerRegistration?.remove()
-        listenerRegistration = null
+    override fun stop() {
+        val listener = valueEventListener
+        val reference = memoReference
+        if (listener != null && reference != null) {
+            reference.removeEventListener(listener)
+        }
+        valueEventListener = null
+        memoReference = null
     }
 
     private fun uploadMemo(memo: Memo) {
-        val firestore = firestoreOrNull() ?: return
+        val database = databaseOrNull() ?: return
         val userId = authOrNull()?.currentUser?.uid ?: return
-        val reference = firestore.collection(FirebaseTenantPaths.memoCollectionPath(userId)).document(memo.id)
-        val document = RemoteMemoDocument.fromMemo(memo)
-
-        firestore.runTransaction { transaction ->
-            val snapshot = transaction.get(reference)
-            val remoteUpdatedAt = snapshot.getLong("updated_at_ms") ?: Long.MIN_VALUE
-            if (!snapshot.exists() || memo.updatedAtMs >= remoteUpdatedAt) {
-                transaction.set(reference, document.toMap())
-            }
-            null
-        }
+        val document = RemoteMemoDocument.fromMemo(memo).toMap()
+        database.getReference(FirebaseTenantPaths.memoDocumentPath(userId, memo.id))
+            .setValue(document)
     }
 
-    private fun applyRemoteChange(change: DocumentChange) {
-        val memoId = change.document.id
-        if (change.type == DocumentChange.Type.REMOVED) {
-            repository.deleteRemoteMemo(memoId)
-            return
-        }
-
-        val remote = RemoteMemoDocument.fromMap(memoId, change.document.data)
-        if (remote.deleted) {
-            repository.deleteRemoteMemo(memoId)
-        } else {
-            repository.applyRemoteMemo(remote.toMemo())
+    private fun applyRemoteSnapshot(snapshot: DataSnapshot) {
+        for (child in snapshot.children) {
+            val memoId = child.key ?: continue
+            val values = child.value as? Map<String, Any?> ?: continue
+            val remote = RemoteMemoDocument.fromMap(memoId, values)
+            if (remote.deleted) {
+                repository.deleteRemoteMemo(memoId)
+            } else {
+                repository.applyRemoteMemo(remote.toMemo())
+            }
         }
     }
 
@@ -168,8 +190,8 @@ class FirebaseSyncCoordinator(
         return if (ensureFirebaseApp()) FirebaseAuth.getInstance() else null
     }
 
-    private fun firestoreOrNull(): FirebaseFirestore? {
-        return if (ensureFirebaseApp()) FirebaseFirestore.getInstance() else null
+    private fun databaseOrNull(): FirebaseDatabase? {
+        return if (ensureFirebaseApp()) FirebaseDatabase.getInstance() else null
     }
 
     private fun ensureFirebaseApp(): Boolean {
@@ -177,10 +199,11 @@ class FirebaseSyncCoordinator(
             return true
         }
 
-        val projectId = appContext.getString(R.string.firebase_project_id).trim()
-        val applicationId = appContext.getString(R.string.firebase_application_id).trim()
-        val apiKey = appContext.getString(R.string.firebase_api_key).trim()
-        if (projectId.isEmpty() || applicationId.isEmpty() || apiKey.isEmpty()) {
+        val projectId = firebaseConfigValue(R.string.firebase_project_id, BuildConfig.FIREBASE_PROJECT_ID)
+        val applicationId = firebaseConfigValue(R.string.firebase_application_id, BuildConfig.FIREBASE_APPLICATION_ID)
+        val apiKey = firebaseConfigValue(R.string.firebase_api_key, BuildConfig.FIREBASE_API_KEY)
+        val databaseUrl = firebaseConfigValue(R.string.firebase_database_url, BuildConfig.FIREBASE_DATABASE_URL)
+        if (projectId.isEmpty() || applicationId.isEmpty() || apiKey.isEmpty() || databaseUrl.isEmpty()) {
             return false
         }
 
@@ -188,8 +211,33 @@ class FirebaseSyncCoordinator(
             .setProjectId(projectId)
             .setApplicationId(applicationId)
             .setApiKey(apiKey)
+            .setDatabaseUrl(databaseUrl)
             .build()
         FirebaseApp.initializeApp(appContext, options)
         return true
+    }
+
+    private fun firebaseConfigValue(resourceId: Int, fallback: String): String {
+        return appContext.getString(resourceId).trim().ifEmpty { fallback.trim() }
+    }
+}
+
+internal fun firebaseSyncFailureMessage(error: Throwable, fallback: String): String {
+    val rawMessage = error.message.orEmpty()
+    return when {
+        rawMessage.contains("CONFIGURATION_NOT_FOUND") ->
+            "Sync account setup is not available yet."
+        rawMessage.contains("EMAIL_EXISTS") ->
+            "An account already exists for this email."
+        rawMessage.contains("INVALID_EMAIL") ->
+            "Enter a valid email address."
+        rawMessage.contains("WEAK_PASSWORD") ->
+            "Use a password with at least 6 characters."
+        rawMessage.contains("INVALID_LOGIN_CREDENTIALS") ||
+            rawMessage.contains("INVALID_PASSWORD") ||
+            rawMessage.contains("EMAIL_NOT_FOUND") ->
+            "Email or password is incorrect."
+        rawMessage.isNotBlank() -> rawMessage
+        else -> fallback
     }
 }

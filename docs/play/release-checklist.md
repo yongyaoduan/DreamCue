@@ -46,10 +46,10 @@
 ## Firebase
 
 - Enable Firebase Auth email/password sign-in.
-- Create Firestore in native mode.
-- Configure Android `firebase_project_id`, `firebase_application_id`, and `firebase_api_key`.
+- Create Realtime Database.
+- Configure Android `firebase_project_id`, `firebase_application_id`, `firebase_api_key`, and `firebase_database_url`.
 - Configure macOS `macos/DreamCueMac/FirebaseConfig.plist`.
-- Apply Firestore rules that restrict memo access to `users/{uid}/memos`.
+- Apply Realtime Database rules that restrict memo access to `users/{uid}/memos`.
 
 ## Backup Policy
 
@@ -61,9 +61,9 @@ This prevents Android auto backup from copying local memo data outside the App-c
 
 - The App launches without crashing.
 - First launch requests notification and alarm permissions.
-- Current, Search, History, and Settings tabs open correctly.
+- Today, Archive, Rhythm, and Account tabs open correctly.
 - A cleared memo moves to History.
-- Search updates only after tapping the search action.
+- Archive search updates only after tapping the search action.
 - Edited memos move to the top of the current list.
 - Sync sign-in controls appear in Settings.
 - Two signed-in devices use the same Firebase Auth account before sync testing.

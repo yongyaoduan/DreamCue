@@ -96,8 +96,8 @@ Responsibilities:
 - Reminder rebuild after device boot
 - Notification tap handling
 - Firebase Auth email/password sign-in
-- Firestore realtime listener
-- Firestore upload after local mutations
+- Realtime Database listener
+- Realtime Database upload after local mutations
 
 ## Firebase Sync
 
@@ -114,9 +114,9 @@ Tenant isolation is based on Firebase Auth user IDs. Remote memo documents live 
 users/{uid}/memos/{memoId}
 ```
 
-The Android client uses Firestore snapshot listeners for realtime updates. The macOS client uses Firebase Auth and Firestore REST endpoints with periodic polling.
+The Android client uses a Realtime Database listener for realtime updates. The macOS client uses Firebase Auth and Realtime Database REST endpoints with periodic polling.
 
-The client-side conflict rule is last-write-wins on `updated_at_ms`. Deleted memos are sent as Firestore documents with `deleted = true` so other devices can remove the local copy.
+The client-side conflict rule is last-write-wins on `updated_at_ms`. Deleted memos are sent as Realtime Database tombstones with `deleted = true` so other devices can remove the local copy.
 
 ## macOS Shell
 
@@ -132,10 +132,10 @@ Responsibilities:
 - Local memo CRUD
 - Local search
 - Firebase Auth REST sign-in and account creation
-- Firestore REST upload, deletion tombstones, and polling
+- Realtime Database REST upload, deletion tombstones, and polling
 
 ## Limits
 
 1. Search is not embedding-based semantic search yet.
 2. Notifications open the Android App for review; they do not yet provide per-memo actions inside the notification.
-3. macOS sync uses polling instead of a Firestore snapshot listener because the macOS client avoids bundling the Firebase Apple SDK in this repository version.
+3. macOS sync uses polling instead of a Realtime Database stream because the macOS client avoids bundling the Firebase Apple SDK in this repository version.

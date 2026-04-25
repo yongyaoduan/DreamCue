@@ -2,9 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>ProjectID</key>
-    <string></string>
-    <key>APIKey</key>
-    <string></string>
+	<key>ProjectID</key>
+	<string>dreamcue</string>
+	<key>APIKey</key>
+	<string>AIzaSyD-SDzD_KVW8SIiiH5aTr3mEYohog48UI0</string>
+	<key>DatabaseURL</key>
+	<string>https://dreamcue-default-rtdb.firebaseio.com</string>
 </dict>
 </plist>

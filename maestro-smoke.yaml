@@ -15,7 +15,7 @@ appId: app.dreamcue
 - tapOn: "Short memo"
 - inputText: "alpha_note"
 - hideKeyboard
-- tapOn: "Save Cue"
+- tapOn: "Save"
 - assertVisible: "alpha_note"
 
 - tapOn: "Capture a cue..."
@@ -23,7 +23,7 @@ appId: app.dreamcue
 - tapOn: "Short memo"
 - inputText: "beta_note"
 - hideKeyboard
-- tapOn: "Save Cue"
+- tapOn: "Save"
 - assertVisible: "beta_note"
 
 - tapOn: "beta_note"

@@ -8,6 +8,7 @@ final class FirebaseRestSyncService {
 
     private let projectId: String
     private let apiKey: String
+    private let databaseURL: String
     private var session: Session?
 
     init() {
@@ -15,6 +16,7 @@ final class FirebaseRestSyncService {
             .flatMap { NSDictionary(contentsOf: $0) as? [String: String] } ?? [:]
         projectId = config["ProjectID"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         apiKey = config["APIKey"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        databaseURL = config["DatabaseURL"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     func signIn(email: String, password: String) async throws {
@@ -36,36 +38,39 @@ final class FirebaseRestSyncService {
     }
 
     func uploadDeletedMemo(id: String) async {
-        guard let session, !projectId.isEmpty else { return }
+        guard let session, !databaseURL.isEmpty else { return }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let fields: [String: Any] = [
-            "content": stringValue(""),
-            "status": stringValue("cleared"),
-            "created_at_ms": integerValue(now),
-            "updated_at_ms": integerValue(now),
-            "cleared_at_ms": integerValue(now),
-            "reminder_count": integerValue(0),
-            "last_reviewed_at_ms": integerValue(now),
-            "deleted": booleanValue(true),
+            "content": "",
+            "status": "cleared",
+            "created_at_ms": now,
+            "updated_at_ms": now,
+            "cleared_at_ms": now,
+            "reminder_count": 0,
+            "last_reviewed_at_ms": now,
+            "deleted": true,
         ]
         await patchDocument(id: id, fields: fields, session: session)
     }
 
     func fetchMemos() async -> [Memo] {
-        guard let session, !projectId.isEmpty else { return [] }
-        let path = "users/\(session.userId)/memos"
-        guard let url = URL(string: firestoreBaseURL().appending("/\(path)")) else { return [] }
+        guard let session, !databaseURL.isEmpty else { return [] }
+        guard var components = URLComponents(string: databaseURL.appending("/users/\(session.userId)/memos.json")) else { return [] }
+        components.queryItems = [URLQueryItem(name: "auth", value: session.idToken)]
+        guard let url = components.url else { return [] }
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
 
         guard let (data, _) = try? await URLSession.shared.data(for: request),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let documents = root["documents"] as? [[String: Any]]
+              !(root is NSNull)
         else {
             return []
         }
 
-        return documents.compactMap(documentToMemo)
+        return root.compactMap { memoId, raw in
+            guard let fields = raw as? [String: Any] else { return nil }
+            return documentToMemo(id: memoId, fields: fields)
+        }
     }
 
     private func authenticate(endpoint: String, email: String, password: String) async throws -> Session {
@@ -97,38 +102,36 @@ final class FirebaseRestSyncService {
     }
 
     private func uploadMemo(_ memo: Memo) async {
-        guard let session, !projectId.isEmpty else { return }
+        guard let session, !databaseURL.isEmpty else { return }
         let fields: [String: Any] = [
-            "content": stringValue(memo.content),
-            "status": stringValue(memo.status.rawValue),
-            "created_at_ms": integerValue(memo.createdAtMs),
-            "updated_at_ms": integerValue(memo.updatedAtMs),
-            "cleared_at_ms": optionalIntegerValue(memo.clearedAtMs),
-            "reminder_count": integerValue(memo.reminderCount),
-            "last_reviewed_at_ms": optionalIntegerValue(memo.lastReviewedAtMs),
-            "deleted": booleanValue(false),
+            "content": memo.content,
+            "status": memo.status.rawValue,
+            "created_at_ms": memo.createdAtMs,
+            "updated_at_ms": memo.updatedAtMs,
+            "cleared_at_ms": jsonValue(memo.clearedAtMs),
+            "reminder_count": memo.reminderCount,
+            "last_reviewed_at_ms": jsonValue(memo.lastReviewedAtMs),
+            "deleted": false,
         ]
         await patchDocument(id: memo.id, fields: fields, session: session)
     }
 
     private func patchDocument(id: String, fields: [String: Any], session: Session) async {
-        let path = "users/\(session.userId)/memos/\(id)"
-        guard let url = URL(string: firestoreBaseURL().appending("/\(path)")) else { return }
+        guard var components = URLComponents(string: databaseURL.appending("/users/\(session.userId)/memos/\(id).json")) else { return }
+        components.queryItems = [URLQueryItem(name: "auth", value: session.idToken)]
+        guard let url = components.url else { return }
         var request = URLRequest(url: url)
-        request.httpMethod = "PATCH"
-        request.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+        request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["fields": fields])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: fields)
         _ = try? await URLSession.shared.data(for: request)
     }
 
-    private func documentToMemo(_ document: [String: Any]) -> Memo? {
-        guard let name = document["name"] as? String,
-              let id = name.split(separator: "/").last.map(String.init),
-              let fields = document["fields"] as? [String: Any],
-              !boolField(fields["deleted"]),
-              let content = stringField(fields["content"]),
-              let status = stringField(fields["status"]).flatMap(MemoStatus.init(rawValue:)),
+    private func documentToMemo(id: String, fields: [String: Any]) -> Memo? {
+        guard !boolField(fields["deleted"]),
+              let content = fields["content"] as? String,
+              let statusRaw = fields["status"] as? String,
+              let status = MemoStatus(rawValue: statusRaw),
               let createdAtMs = intField(fields["created_at_ms"]),
               let updatedAtMs = intField(fields["updated_at_ms"]),
               let reminderCount = intField(fields["reminder_count"])
@@ -147,10 +150,6 @@ final class FirebaseRestSyncService {
             lastReviewedAtMs: intField(fields["last_reviewed_at_ms"])
         )
     }
-
-    private func firestoreBaseURL() -> String {
-        "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/(default)/documents"
-    }
 }
 
 private enum SyncError: LocalizedError {
@@ -167,34 +166,26 @@ private enum SyncError: LocalizedError {
     }
 }
 
-private func stringValue(_ value: String) -> [String: Any] {
-    ["stringValue": value]
-}
-
-private func integerValue(_ value: Int64) -> [String: Any] {
-    ["integerValue": String(value)]
-}
-
-private func optionalIntegerValue(_ value: Int64?) -> [String: Any] {
-    if let value {
-        return integerValue(value)
-    }
-    return ["nullValue": NSNull()]
-}
-
-private func booleanValue(_ value: Bool) -> [String: Any] {
-    ["booleanValue": value]
-}
-
-private func stringField(_ value: Any?) -> String? {
-    (value as? [String: Any])?["stringValue"] as? String
-}
-
 private func intField(_ value: Any?) -> Int64? {
-    guard let raw = (value as? [String: Any])?["integerValue"] as? String else { return nil }
-    return Int64(raw)
+    if let value = value as? Int64 {
+        return value
+    }
+    if let value = value as? Int {
+        return Int64(value)
+    }
+    if let value = value as? Double {
+        return Int64(value)
+    }
+    if let value = value as? String {
+        return Int64(value)
+    }
+    return nil
 }
 
 private func boolField(_ value: Any?) -> Bool {
-    ((value as? [String: Any])?["booleanValue"] as? Bool) ?? false
+    (value as? Bool) ?? false
+}
+
+private func jsonValue(_ value: Int64?) -> Any {
+    value ?? NSNull()
 }

@@ -259,7 +259,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Capture a cue...").performClick()
         composeRule.onNodeWithText("New Cue").assertIsDisplayed()
         composeRule.onNodeWithText("Short memo").performTextInput("Design sync with Sarah")
-        composeRule.onNodeWithText("Save Cue").performClick()
+        composeRule.onNodeWithText("Save").performClick()
 
         assert(saved)
     }
@@ -305,7 +305,7 @@ class DreamCueAppTest {
         assert(composeRule.onAllNodesWithText("Cue details").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Save with context").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Context and timing can stay optional.").fetchSemanticsNodes().isEmpty())
-        composeRule.onNodeWithText("Save Cue").assertIsDisplayed()
+        composeRule.onNodeWithText("Save").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Close").performClick()
         assert(composeRule.onAllNodesWithText("New Cue").fetchSemanticsNodes().isEmpty())
         assert(!dismissed)

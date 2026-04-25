@@ -10,20 +10,37 @@ final class MemoStore: ObservableObject {
     @Published var syncEmail = ""
     @Published var syncPassword = ""
     @Published var syncStatus = "Sign in to sync across devices."
+    @Published private(set) var signedInEmail = ""
+    @Published var dailyReminderEnabled = true
+    @Published var quietHoursEnabled = true
+    @Published var reminderHour = 21
+    @Published var reminderMinute = 0
+    @Published var quietStartHour = 22
+    @Published var quietEndHour = 7
 
     private let storageURL: URL
     private let syncService = FirebaseRestSyncService()
     private var pollTask: Task<Void, Never>?
 
     init() {
-        let baseURL = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? FileManager.default.temporaryDirectory
-        let appURL = baseURL.appendingPathComponent("DreamCue", isDirectory: true)
+        let appURL: URL
+        if let testStorage = ProcessInfo.processInfo.environment["DREAMCUE_STORAGE_DIR"], !testStorage.isEmpty {
+            appURL = URL(fileURLWithPath: testStorage, isDirectory: true)
+        } else {
+            let baseURL = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first ?? FileManager.default.temporaryDirectory
+            appURL = baseURL.appendingPathComponent("DreamCue", isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
         storageURL = appURL.appendingPathComponent("memos.json")
         load()
+        if let previewEmail = ProcessInfo.processInfo.environment["DREAMCUE_PREVIEW_SYNC_EMAIL"], !previewEmail.isEmpty {
+            signedInEmail = previewEmail
+            syncEmail = previewEmail
+            syncStatus = "Sync account signed in."
+        }
     }
 
     var currentMemos: [Memo] {
@@ -39,10 +56,30 @@ final class MemoStore: ObservableObject {
     var searchResults: [Memo] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if query.isEmpty {
-            return []
+            return archiveMemos
         }
         return memos.filter { $0.content.lowercased().contains(query) }
             .sorted { $0.updatedAtMs > $1.updatedAtMs }
+    }
+
+    var archiveMemos: [Memo] {
+        memos.sorted { $0.updatedAtMs > $1.updatedAtMs }
+    }
+
+    var reminderTimeText: String {
+        String(format: "%02d:%02d", reminderHour, reminderMinute)
+    }
+
+    var quietHoursText: String {
+        String(format: "%02d:00 – %02d:00", quietStartHour, quietEndHour)
+    }
+
+    var isSyncActive: Bool {
+        !signedInEmail.isEmpty
+    }
+
+    var syncDisplayEmail: String {
+        signedInEmail.isEmpty ? syncEmail : signedInEmail
     }
 
     func addMemo() {
@@ -112,6 +149,7 @@ final class MemoStore: ObservableObject {
         Task {
             do {
                 try await syncService.signIn(email: email, password: password)
+                signedInEmail = email
                 syncStatus = "Sync account signed in."
                 await pullAndUpload()
                 startPolling()
@@ -132,6 +170,7 @@ final class MemoStore: ObservableObject {
         Task {
             do {
                 try await syncService.createAccount(email: email, password: password)
+                signedInEmail = email
                 syncStatus = "Sync account created."
                 await pullAndUpload()
                 startPolling()
@@ -146,7 +185,13 @@ final class MemoStore: ObservableObject {
         pollTask = nil
         syncService.signOut()
         syncPassword = ""
+        signedInEmail = ""
         syncStatus = "Sync account signed out."
+    }
+
+    func setReminderTime(hour: Int, minute: Int) {
+        reminderHour = hour
+        reminderMinute = minute
     }
 
     private func load() {

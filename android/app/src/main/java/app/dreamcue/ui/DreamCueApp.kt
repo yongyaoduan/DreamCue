@@ -1428,7 +1428,7 @@ private fun CaptureSheet(
                 MetadataChip(Icons.Outlined.NotificationsNone, "${300 - draft.length}/300")
             }
             PrimaryButton(
-                text = "Save Cue",
+                text = "Save",
                 onClick = onSave,
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = Icons.Outlined.Check,

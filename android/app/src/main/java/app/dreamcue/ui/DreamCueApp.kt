@@ -6,7 +6,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +25,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Undo
@@ -43,6 +47,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sync
@@ -66,15 +71,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -83,6 +91,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -101,6 +110,7 @@ import app.dreamcue.model.Memo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val Ink = Color(0xFF15201D)
 private val InkSoft = Color(0xFF58635E)
@@ -149,6 +159,8 @@ fun DreamCueApp(
     onCreateSyncAccount: () -> Unit,
     onSignOutSync: () -> Unit,
     onReminderEnabledChange: (Boolean) -> Unit,
+    onReorderCurrentMemos: (Int, Int) -> Unit = { _, _ -> },
+    onSetMemoPinned: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     var showCaptureSheet by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
@@ -199,6 +211,7 @@ fun DreamCueApp(
                             state = state,
                             onOpenCapture = { showCaptureSheet = true },
                             onOpenMemo = onOpenMemoDetail,
+                            onReorderCurrentMemos = onReorderCurrentMemos,
                         )
 
                         MemoScreen.HISTORY -> ArchiveScreen(
@@ -266,6 +279,7 @@ fun DreamCueApp(
                             onReopenMemo(memo.id)
                         }
                     },
+                    onSetPinned = { onSetMemoPinned(memo.id, it) },
                     onDelete = { onRequestDelete(memo) },
                 )
             }
@@ -286,6 +300,7 @@ private fun TodayScreen(
     state: MainUiState,
     onOpenCapture: () -> Unit,
     onOpenMemo: (Memo) -> Unit,
+    onReorderCurrentMemos: (Int, Int) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -341,12 +356,19 @@ private fun TodayScreen(
                 FirstCuePanel(onOpenCapture = onOpenCapture)
             }
         } else {
-            items(items = state.currentMemos, key = { "today-${it.id}" }) { memo ->
-                CueCard(
+            itemsIndexed(
+                items = state.currentMemos,
+                key = { _, memo -> "today-${memo.id}" },
+            ) { index, memo ->
+                ReorderableCueCard(
                     memo = memo,
+                    displayNumber = index + 1,
                     statusLabel = "Current",
                     accent = Forest,
                     onOpen = { onOpenMemo(memo) },
+                    index = index,
+                    count = state.currentMemos.size,
+                    onMove = onReorderCurrentMemos,
                 )
             }
         }
@@ -361,12 +383,11 @@ private fun ArchiveScreen(
     onRunSearch: () -> Unit,
     onOpenMemo: (Memo) -> Unit,
 ) {
-    val archiveMemos = state.historyMemos.sortedByDescending { it.updatedAtMs }
+    val archiveMemos = (state.currentMemos + state.historyMemos).sortedByDescending { it.updatedAtMs }
     val archiveSearchResults = state.searchResults
         .map { it.memo }
-        .filter { !it.isActive }
         .distinctBy { it.id }
-    val resultLabel = "${archiveSearchResults.size} archived ${if (archiveSearchResults.size == 1) "cue" else "cues"}"
+    val resultLabel = "${archiveSearchResults.size} ${if (archiveSearchResults.size == 1) "cue" else "cues"}"
 
     LazyColumn(
         modifier = Modifier
@@ -417,9 +438,13 @@ private fun ArchiveScreen(
                     EmptyPanel("No archived cues found")
                 }
             } else {
-                items(items = archiveSearchResults, key = { "archive-search-${it.id}" }) { memo ->
+                itemsIndexed(
+                    items = archiveSearchResults,
+                    key = { _, memo -> "archive-search-${memo.id}" },
+                ) { index, memo ->
                     SearchResultCueCard(
                         memo = memo,
+                        displayNumber = index + 1,
                         onOpen = { onOpenMemo(memo) },
                     )
                 }
@@ -428,22 +453,23 @@ private fun ArchiveScreen(
             item {
                 SectionTitle(
                     title = "All History",
-                    subtitle = "0 archived cues",
+                    subtitle = "0 cues",
                 )
             }
             item {
-                EmptyPanel("No completed cues yet")
+                EmptyPanel("No cues yet")
             }
         } else {
             item {
                 SectionTitle(
                     title = "All History",
-                    subtitle = "${archiveMemos.size} archived ${if (archiveMemos.size == 1) "cue" else "cues"}",
+                    subtitle = "${archiveMemos.size} ${if (archiveMemos.size == 1) "cue" else "cues"}",
                 )
             }
-            items(items = archiveMemos, key = { "archive-${it.id}" }) { memo ->
+            itemsIndexed(items = archiveMemos, key = { _, memo -> "archive-${memo.id}" }) { index, memo ->
                 TimelineCue(
                     memo = memo,
+                    displayNumber = index + 1,
                     onOpen = { onOpenMemo(memo) },
                 )
             }
@@ -569,7 +595,7 @@ private fun AccountScreen(
         item {
             AppHeader(
                 title = "Account",
-                subtitle = if (signedIn) "Private sync is active." else "Private sync across devices.",
+                subtitle = "",
             )
         }
 
@@ -724,14 +750,16 @@ private fun AppHeader(
             color = Ink,
             fontWeight = FontWeight.Medium,
         )
-        Text(
-            text = subtitle,
-            color = InkSoft,
-            fontSize = 12.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(top = 3.dp),
-        )
+        if (subtitle.isNotBlank()) {
+            Text(
+                text = subtitle,
+                color = InkSoft,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
     }
 }
 
@@ -1022,12 +1050,14 @@ private fun SectionTitle(
 @Composable
 private fun CueCard(
     memo: Memo,
+    displayNumber: Int,
     statusLabel: String,
     accent: Color,
     onOpen: () -> Unit,
 ) {
     ElevatedPanel(
         modifier = Modifier.clickable(onClick = onOpen),
+        color = if (memo.pinned) Stone.copy(alpha = 0.42f) else Porcelain,
         contentPadding = PaddingValues(15.dp),
     ) {
         Row(
@@ -1035,7 +1065,7 @@ private fun CueCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            SmallMarker(accent)
+            NumberMarker(displayNumber, memo.pinned, accent)
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1053,7 +1083,17 @@ private fun CueCard(
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
-                    StatusChip(statusLabel, accent)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (memo.pinned) {
+                            Icon(
+                                imageVector = Icons.Outlined.PushPin,
+                                contentDescription = "Pinned cue",
+                                tint = InkSoft,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                        StatusChip(statusLabel, accent)
+                    }
                 }
                 Text(
                     text = memoSummaryLine(memo),
@@ -1074,26 +1114,69 @@ private fun CueCard(
 }
 
 @Composable
+private fun ReorderableCueCard(
+    memo: Memo,
+    displayNumber: Int,
+    statusLabel: String,
+    accent: Color,
+    onOpen: () -> Unit,
+    index: Int,
+    count: Int,
+    onMove: (Int, Int) -> Unit,
+) {
+    var dragOffset by remember { mutableStateOf(0f) }
+
+    Box(
+        modifier = Modifier
+            .graphicsLayer { translationY = dragOffset }
+            .pointerInput(index, count) {
+                detectDragGesturesAfterLongPress(
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragOffset += dragAmount.y
+                    },
+                    onDragEnd = {
+                        val rowStep = (dragOffset / 88f).roundToInt()
+                        val target = (index + rowStep).coerceIn(0, count - 1)
+                        dragOffset = 0f
+                        if (target != index) {
+                            onMove(index, target)
+                        }
+                    },
+                    onDragCancel = {
+                        dragOffset = 0f
+                    },
+                )
+            },
+    ) {
+        CueCard(
+            memo = memo,
+            displayNumber = displayNumber,
+            statusLabel = statusLabel,
+            accent = accent,
+            onOpen = onOpen,
+        )
+    }
+}
+
+@Composable
 private fun SearchResultCueCard(
     memo: Memo,
+    displayNumber: Int,
     onOpen: () -> Unit,
 ) {
-    val label = if (memo.isActive) "Current" else "History"
+    val label = if (memo.isActive) "Current" else "Cleared"
 
     ElevatedPanel(
         modifier = Modifier.clickable(onClick = onOpen),
+        color = if (memo.pinned) Stone.copy(alpha = 0.42f) else Porcelain,
         contentPadding = PaddingValues(15.dp),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Search,
-                contentDescription = null,
-                tint = Forest,
-                modifier = Modifier.size(22.dp),
-            )
+            NumberMarker(displayNumber, memo.pinned, Forest)
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1129,6 +1212,7 @@ private fun SearchResultCueCard(
 @Composable
 private fun TimelineCue(
     memo: Memo,
+    displayNumber: Int,
     onOpen: () -> Unit,
 ) {
     Row(
@@ -1138,7 +1222,7 @@ private fun TimelineCue(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            SmallMarker(Forest)
+            SmallMarker(if (memo.isActive) Forest else Brass)
             Box(
                 modifier = Modifier
                     .width(1.dp)
@@ -1148,6 +1232,7 @@ private fun TimelineCue(
         }
         ElevatedPanel(
             modifier = Modifier.weight(1f),
+            color = if (memo.pinned) Stone.copy(alpha = 0.42f) else Porcelain,
             contentPadding = PaddingValues(15.dp),
         ) {
             Row(
@@ -1155,7 +1240,13 @@ private fun TimelineCue(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    NumberMarker(displayNumber, memo.pinned, if (memo.isActive) Forest else Brass)
+                    Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = memo.content,
                         color = Ink,
@@ -1170,6 +1261,24 @@ private fun TimelineCue(
                         color = InkSoft,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 7.dp),
+                        )
+                    }
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (memo.pinned) {
+                        Icon(
+                            imageVector = Icons.Outlined.PushPin,
+                            contentDescription = "Pinned cue",
+                            tint = InkSoft,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    StatusChip(
+                        text = if (memo.isActive) "Current" else "Cleared",
+                        color = if (memo.isActive) Forest else Brass,
                     )
                 }
                 Icon(
@@ -1223,10 +1332,9 @@ private fun PermissionHealthPanel() {
             fontSize = 17.sp,
             fontWeight = FontWeight.Bold,
         )
-        PermissionLine("Exact alarms", "Recommended")
         PermissionLine("Notifications", "Required")
         Text(
-            text = "Reminders use exact alarms to show up reliably even on silent mode.",
+            text = "Daily reminders use standard notifications.",
             color = InkSoft,
             fontSize = 12.sp,
             lineHeight = 17.sp,
@@ -1418,6 +1526,8 @@ private fun CaptureSheet(
                 label = { Text("Short memo") },
                 placeholder = { Text("Design sync with Sarah") },
                 minLines = 6,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onSave() }),
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1472,23 +1582,19 @@ private fun ReminderTimePickerSheet(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 WheelColumn(
-                    values = hourWheelValues(selectedHour),
+                    values = (0..23).toList(),
                     selected = selectedHour,
                     contentDescription = "Hour picker",
                     label = { it.toString().padStart(2, '0') },
                     onSelect = { selectedHour = it },
-                    onSwipeUp = { selectedHour = (selectedHour + 1) % 24 },
-                    onSwipeDown = { selectedHour = (selectedHour + 23) % 24 },
                     modifier = Modifier.weight(1f),
                 )
                 WheelColumn(
-                    values = minuteWheelValues(selectedMinute),
+                    values = (0..59 step 5).toList(),
                     selected = selectedMinute,
                     contentDescription = "Minute picker",
                     label = { it.toString().padStart(2, '0') },
                     onSelect = { selectedMinute = it },
-                    onSwipeUp = { selectedMinute = (selectedMinute + 5) % 60 },
-                    onSwipeDown = { selectedMinute = (selectedMinute + 55) % 60 },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -1510,46 +1616,50 @@ private fun WheelColumn(
     contentDescription: String,
     label: (Int) -> String,
     onSelect: (Int) -> Unit,
-    onSwipeUp: () -> Unit,
-    onSwipeDown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val selectedState by rememberUpdatedState(selected)
+    var dragRemainderPx by remember { mutableFloatStateOf(0f) }
+    val stepPx = with(LocalDensity.current) { 38.dp.toPx() }
+    val selectedIndex = values.indexOf(selected).coerceAtLeast(0)
+    val visibleValues = (-2..2).mapNotNull { offset -> values.getOrNull(selectedIndex + offset) }
+    val scrollableState = rememberScrollableState { delta ->
+        dragRemainderPx -= delta
+        val steps = (dragRemainderPx / stepPx).toInt()
+        if (steps != 0) {
+            val currentIndex = values.indexOf(selectedState).coerceAtLeast(0)
+            val targetIndex = (currentIndex + steps).coerceIn(0, values.lastIndex)
+            if (targetIndex != currentIndex) {
+                values.getOrNull(targetIndex)?.let(onSelect)
+            }
+            dragRemainderPx -= steps * stepPx
+        }
+        delta
+    }
+
     Column(
         modifier = modifier
-            .height(168.dp)
+            .height(220.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(Color(0xFFF1EADF))
             .border(1.dp, Line, RoundedCornerShape(24.dp))
+            .scrollable(
+                state = scrollableState,
+                orientation = Orientation.Vertical,
+            )
             .semantics {
                 this.contentDescription = contentDescription
-            }
-            .pointerInput(selected) {
-                var dragDistance = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { dragDistance = 0f },
-                    onVerticalDrag = { _, dragAmount ->
-                        dragDistance += dragAmount
-                    },
-                    onDragEnd = {
-                        if (dragDistance < -28f) {
-                            onSwipeUp()
-                        } else if (dragDistance > 28f) {
-                            onSwipeDown()
-                        }
-                    },
-                )
             },
-        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        values.forEach { value ->
+        visibleValues.forEach { value ->
             val isSelected = value == selected
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (isSelected) 48.dp else 30.dp)
-                    .background(if (isSelected) Stone else Color.Transparent)
-                    .clickable { onSelect(value) },
+                    .height(48.dp)
+                    .background(if (isSelected) Stone else Color.Transparent),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -1571,6 +1681,7 @@ private fun MemoDetailDialog(
     onDraftChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onPrimaryAction: () -> Unit,
+    onSetPinned: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
     BottomSheetDialog(onDismiss = onDismiss) {
@@ -1603,6 +1714,8 @@ private fun MemoDetailDialog(
                     .height(150.dp),
                 minLines = 5,
                 label = { Text("Cue") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onDismiss() }),
             )
             ElevatedPanel(
                 color = Ivory,
@@ -1626,12 +1739,15 @@ private fun MemoDetailDialog(
                     color = Clay,
                     modifier = Modifier.weight(1f),
                 )
-                DetailActionButton(
-                    contentDescription = "Keep cue",
-                    icon = Icons.Outlined.NotificationsNone,
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                )
+                if (memo.isActive) {
+                    DetailActionButton(
+                        contentDescription = if (memo.pinned) "Unpin cue" else "Pin cue",
+                        icon = Icons.Outlined.PushPin,
+                        onClick = { onSetPinned(!memo.pinned) },
+                        color = InkSoft,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 DetailActionButton(
                     contentDescription = if (memo.isActive) "Complete cue" else "Restore cue",
                     icon = if (memo.isActive) Icons.Outlined.TaskAlt else Icons.AutoMirrored.Outlined.Undo,
@@ -1738,17 +1854,24 @@ private fun BottomSheetDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
+        val surfaceInteraction = remember { MutableInteractionSource() }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Transparent),
+                .background(Color.Transparent)
+                .clickable(onClick = onDismiss),
             contentAlignment = Alignment.BottomCenter,
         ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 10.dp, top = 10.dp, end = 10.dp, bottom = 36.dp)
-                    .navigationBarsPadding(),
+                    .navigationBarsPadding()
+                    .clickable(
+                        interactionSource = surfaceInteraction,
+                        indication = null,
+                        onClick = {},
+                    ),
                 color = Porcelain,
                 shape = RoundedCornerShape(24.dp),
                 shadowElevation = 18.dp,
@@ -1927,6 +2050,28 @@ private fun MetadataChip(icon: ImageVector, text: String) {
 }
 
 @Composable
+private fun NumberMarker(number: Int, pinned: Boolean, color: Color) {
+    Surface(
+        modifier = Modifier
+            .padding(top = 1.dp)
+            .size(width = 34.dp, height = 28.dp),
+        color = if (pinned) Color.White.copy(alpha = 0.62f) else color.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.18f)),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = "#${number.toString().padStart(2, '0')}",
+                color = color,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
 private fun SmallMarker(color: Color) {
     Box(
         modifier = Modifier
@@ -1999,16 +2144,4 @@ private fun formatTimestamp(timestampMs: Long?): String {
     }
     val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     return formatter.format(Date(timestampMs))
-}
-
-private fun hourWheelValues(selectedHour: Int): List<Int> {
-    return listOf(-2, -1, 0, 1, 2).map { offset ->
-        (selectedHour + offset + 24) % 24
-    }
-}
-
-private fun minuteWheelValues(selectedMinute: Int): List<Int> {
-    return listOf(-15, -10, 0, 10, 15).map { offset ->
-        (selectedMinute + offset + 60) % 60
-    }
 }

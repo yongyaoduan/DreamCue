@@ -8,6 +8,7 @@ import app.dreamcue.model.ReminderTime
 import app.dreamcue.model.ReviewSnapshot
 import app.dreamcue.model.SearchResult
 import java.io.File
+import org.json.JSONArray
 import org.json.JSONObject.NULL
 import org.json.JSONObject
 
@@ -72,14 +73,55 @@ class DreamCueRepository(context: Context) {
         parseUnit(DreamCueBridge.nativeDeleteMemo(requireHandle(), memoId))
     }
 
+    fun deleteMemoWithTombstone(memoId: String, deletedAtMs: Long = System.currentTimeMillis()): Long {
+        deleteMemo(memoId)
+        markMemoDeleted(memoId, deletedAtMs)
+        return deletedAtMs
+    }
+
+    fun applyRemoteDeletedMemo(memoId: String, deletedAtMs: Long) {
+        val localMemo = listAllMemos().firstOrNull { it.id == memoId }
+        if (localMemo == null || localMemo.updatedAtMs <= deletedAtMs) {
+            markMemoDeleted(memoId, deletedAtMs)
+            deleteRemoteMemo(memoId, deletedAtMs)
+        }
+    }
+
+    fun deletedMemoAt(memoId: String): Long? {
+        val key = deletedMemoKey(memoId)
+        return if (prefs.contains(key)) prefs.getLong(key, 0L) else null
+    }
+
+    fun markMemoDeleted(memoId: String, deletedAtMs: Long) {
+        prefs.edit {
+            putLong(deletedMemoKey(memoId), deletedAtMs)
+        }
+    }
+
+    fun clearDeletedMemo(memoId: String) {
+        prefs.edit {
+            remove(deletedMemoKey(memoId))
+        }
+    }
+
+    fun setMemoPinned(memoId: String, pinned: Boolean): Memo = parseObject(
+        DreamCueBridge.nativeSetMemoPinned(requireHandle(), memoId, if (pinned) 1 else 0),
+        Memo::fromJson,
+    )
+
     fun applyRemoteMemo(memo: Memo): Memo = parseObject(
         DreamCueBridge.nativeApplyRemoteMemo(requireHandle(), memo.toJson().toString()),
         Memo::fromJson,
     )
 
-    fun deleteRemoteMemo(memoId: String) {
-        parseUnit(DreamCueBridge.nativeDeleteRemoteMemo(requireHandle(), memoId))
+    fun deleteRemoteMemo(memoId: String, deletedAtMs: Long = Long.MAX_VALUE) {
+        parseUnit(DreamCueBridge.nativeDeleteRemoteMemo(requireHandle(), memoId, deletedAtMs))
     }
+
+    fun reorderActiveMemos(orderedIds: List<String>): List<Memo> = parseArray(
+        DreamCueBridge.nativeReorderActiveMemos(requireHandle(), JSONArray(orderedIds).toString()),
+        Memo::fromJson,
+    )
 
     fun listActiveMemos(): List<Memo> = parseArray(
         DreamCueBridge.nativeListActiveMemos(requireHandle()),
@@ -170,6 +212,11 @@ class DreamCueRepository(context: Context) {
         private const val KEY_HOUR = "reminder_hour"
         private const val KEY_MINUTE = "reminder_minute"
         private const val KEY_REMINDER_ENABLED = "reminder_enabled"
+        private const val KEY_DELETED_MEMO_PREFIX = "deleted_memo_"
+
+        private fun deletedMemoKey(memoId: String): String {
+            return KEY_DELETED_MEMO_PREFIX + memoId
+        }
     }
 }
 
@@ -183,4 +230,6 @@ private fun Memo.toJson(): JSONObject {
         .put("cleared_at_ms", clearedAtMs ?: NULL)
         .put("reminder_count", reminderCount)
         .put("last_reviewed_at_ms", lastReviewedAtMs ?: NULL)
+        .put("display_order", displayOrder)
+        .put("pinned", pinned)
 }

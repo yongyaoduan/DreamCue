@@ -3,16 +3,35 @@ import XCTest
 
 final class DreamCueMacUITests: XCTestCase {
     @objc
+    func testSidebarSelectionFillsFullRows() {
+        let app = launchIsolatedApp()
+
+        XCTAssertTrue(app.buttons["Today"].waitForExistence(timeout: 5))
+        assertSidebarButtonFillsRow(app.buttons["Today"].firstMatch)
+
+        app.buttons["Archive"].firstMatch.click()
+        assertSidebarButtonFillsRow(app.buttons["Archive"].firstMatch)
+
+        app.buttons["Rhythm"].firstMatch.click()
+        assertSidebarButtonFillsRow(app.buttons["Rhythm"].firstMatch)
+        attachScreenshot("mac-sidebar-selection-redesign", app: app)
+
+        app.buttons["Account"].firstMatch.click()
+        assertSidebarButtonFillsRow(app.buttons["Account"].firstMatch)
+    }
+
+    @objc
     func testPrimaryScreensMatchDesktopFlow() {
         let app = launchIsolatedApp()
 
         XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Daily rhythm"].exists)
         XCTAssertTrue(app.staticTexts["Capture a cue..."].exists || app.buttons["New Cue"].exists)
         XCTAssertTrue(app.staticTexts["Active Cues"].exists)
+        XCTAssertFalse(app.staticTexts["Private cues."].exists)
+        XCTAssertFalse(app.staticTexts["Syncing"].exists)
         attachScreenshot("mac-today-redesign", app: app)
 
-        app.buttons["Archive"].firstMatch.click()
+        clickTrailingSideOf(app.buttons["Archive"].firstMatch)
         XCTAssertTrue(app.staticTexts["Archive"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.searchFields["Search cues..."].exists)
         XCTAssertFalse(app.buttons["Run Search"].exists)
@@ -21,13 +40,15 @@ final class DreamCueMacUITests: XCTestCase {
         app.buttons["Rhythm"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["Daily Reminder"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["Daily Reminder Toggle"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["Quiet Hours Toggle"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["Quiet Hours Toggle"].exists)
+        XCTAssertFalse(app.staticTexts["Quiet Hours"].exists)
         XCTAssertTrue(app.buttons["Change Time"].exists)
         attachScreenshot("mac-rhythm-redesign", app: app)
 
         app.buttons["Account"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["Sync Account"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Tenant-scoped privacy"].exists)
+        XCTAssertFalse(app.staticTexts["Private sync across devices."].exists)
         XCTAssertFalse(app.staticTexts["Remote path"].exists)
         XCTAssertFalse(app.staticTexts["users/{uid}/memos"].exists)
         attachScreenshot("mac-account-redesign", app: app)
@@ -41,9 +62,13 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
         app.buttons["New Cue"].click()
         XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
+        assertNewCueSheetLayout(app)
+        attachScreenshot("mac-new-cue-redesign", app: app)
         app.textViews["Cue Text"].click()
         paste(cueText, app: app)
-        app.buttons["Save"].click()
+        app.typeKey(.return, modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["New Cue"].exists)
+        app.typeKey(.return, modifierFlags: [])
 
         XCTAssertTrue(app.buttons[cueText].waitForExistence(timeout: 5))
         app.buttons[cueText].click()
@@ -54,14 +79,39 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Complete Cue"].exists)
         XCTAssertTrue(app.buttons["Delete Cue"].exists)
         XCTAssertFalse(app.buttons["Archive Cue"].exists)
-        XCTAssertTrue(app.buttons["Remind"].exists)
+        XCTAssertFalse(app.buttons["Remind"].exists)
+        XCTAssertFalse(app.buttons["Change Time"].exists)
         attachScreenshot("mac-cue-detail-redesign", app: app)
 
+        app.typeKey(.return, modifierFlags: [])
+        app.buttons["Rhythm"].firstMatch.click()
         app.buttons["Change Time"].click()
         XCTAssertTrue(app.staticTexts["Select reminder time"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Save Time"].exists)
-        XCTAssertTrue(app.buttons["Cancel"].exists)
+        XCTAssertFalse(app.staticTexts["Wed"].exists)
+        XCTAssertFalse(app.staticTexts["Apr 23"].exists)
+        XCTAssertFalse(app.buttons["Save Time"].exists)
+        XCTAssertTrue(app.buttons["Done"].exists)
         attachScreenshot("mac-time-picker-redesign", app: app)
+    }
+
+    @objc
+    func testPinnedCueStaysAboveNewCue() {
+        let app = launchIsolatedApp()
+        let pinnedCue = "pinned_order_\(UUID().uuidString.prefix(6))"
+        let newerCue = "new_order_\(UUID().uuidString.prefix(6))"
+
+        XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
+        createCue(pinnedCue, app: app)
+        XCTAssertTrue(app.buttons[pinnedCue].waitForExistence(timeout: 5))
+        app.buttons[pinnedCue].click()
+        XCTAssertTrue(app.buttons["Pin Cue"].waitForExistence(timeout: 5))
+        app.buttons["Pin Cue"].click()
+
+        createCue(newerCue, app: app)
+        XCTAssertTrue(app.buttons[pinnedCue].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons[newerCue].waitForExistence(timeout: 5))
+        XCTAssertLessThan(app.buttons[pinnedCue].frame.minY, app.buttons[newerCue].frame.minY)
+        attachScreenshot("mac-pinned-order-redesign", app: app)
     }
 
     @objc
@@ -92,9 +142,42 @@ final class DreamCueMacUITests: XCTestCase {
         app.buttons["Account"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["syncpeer1777...@example.com"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Sync Health"].exists)
+        XCTAssertFalse(app.staticTexts["Private sync is active."].exists)
+        XCTAssertFalse(app.staticTexts["Private sync is active on this account."].exists)
         XCTAssertFalse(app.staticTexts["Remote path"].exists)
         XCTAssertFalse(app.staticTexts["Realtime Database"].exists)
         attachScreenshot("mac-account-signed-in-compact", app: app)
+    }
+
+    @objc
+    func testArchiveDetailUsesStatusSpecificActions() {
+        let app = launchIsolatedApp()
+        let activeCue = "active_archive_\(UUID().uuidString.prefix(6))"
+        let clearedCue = "cleared_archive_\(UUID().uuidString.prefix(6))"
+
+        XCTAssertTrue(app.staticTexts["Daily rhythm"].waitForExistence(timeout: 5))
+        createCue(activeCue, app: app)
+        createCue(clearedCue, app: app)
+        app.buttons[clearedCue].click()
+        app.buttons["Complete Cue"].click()
+
+        app.buttons["Archive"].firstMatch.click()
+        clickTrailingSideOf(app.buttons[activeCue].firstMatch)
+        XCTAssertTrue(app.buttons["Delete Cue"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Complete Cue"].exists)
+        XCTAssertFalse(app.buttons["Remind"].exists)
+        XCTAssertFalse(app.buttons["Return to Today"].exists)
+        app.buttons["Save"].click()
+
+        clickTrailingSideOf(app.buttons[clearedCue].firstMatch)
+        XCTAssertTrue(app.buttons["Delete Cue"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Return to Today"].exists)
+        XCTAssertFalse(app.buttons["Complete Cue"].exists)
+        XCTAssertFalse(app.buttons["Remind"].exists)
+        app.buttons["Return to Today"].click()
+
+        app.buttons["Today"].firstMatch.click()
+        XCTAssertTrue(app.buttons[clearedCue].waitForExistence(timeout: 5))
     }
 
     @objc
@@ -132,6 +215,8 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     private func createCue(_ text: String, app: XCUIApplication) {
+        closeSystemPreferences()
+        app.activate()
         app.buttons["New Cue"].click()
         XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
         app.textViews["Cue Text"].click()
@@ -139,10 +224,37 @@ final class DreamCueMacUITests: XCTestCase {
         app.buttons["Save"].click()
     }
 
+    private func clickTrailingSideOf(_ element: XCUIElement) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5))
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).click()
+    }
+
+    private func assertNewCueSheetLayout(_ app: XCUIApplication) {
+        let editor = app.textViews["Cue Text"].firstMatch
+        let save = app.buttons["Save"].firstMatch
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.exists)
+        XCTAssertTrue(cancel.exists)
+        XCTAssertGreaterThanOrEqual(editor.frame.width, 510)
+        XCTAssertGreaterThan(save.frame.minY, editor.frame.maxY)
+        XCTAssertGreaterThan(cancel.frame.minY, editor.frame.maxY)
+        XCTAssertLessThanOrEqual(abs(save.frame.maxX - editor.frame.maxX), 2)
+        XCTAssertGreaterThanOrEqual(editor.frame.minX, 0)
+        XCTAssertGreaterThanOrEqual(cancel.frame.minX, editor.frame.minX)
+    }
+
+    private func assertSidebarButtonFillsRow(_ element: XCUIElement) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(element.frame.width, 132)
+        XCTAssertLessThanOrEqual(element.frame.height, 44)
+    }
+
     private func launchIsolatedApp(
         function: String = #function,
         extraEnvironment: [String: String] = [:]
     ) -> XCUIApplication {
+        closeSystemPreferences()
         let app = XCUIApplication()
         let safeName = function.replacingOccurrences(of: "()", with: "")
         let storageURL = FileManager.default.temporaryDirectory
@@ -157,6 +269,16 @@ final class DreamCueMacUITests: XCTestCase {
         }
         app.launch()
         return app
+    }
+
+    private func closeSystemPreferences() {
+        let bundleIdentifiers = ["com.apple.systempreferences"]
+        for bundleIdentifier in bundleIdentifiers {
+            let app = XCUIApplication(bundleIdentifier: bundleIdentifier)
+            if app.exists {
+                app.terminate()
+            }
+        }
     }
 
     private func syncEnvironment(_ key: String, fallbackPath: String) throws -> String {

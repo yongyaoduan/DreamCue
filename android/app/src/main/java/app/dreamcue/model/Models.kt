@@ -42,6 +42,8 @@ data class Memo(
     val clearedAtMs: Long?,
     val reminderCount: Long,
     val lastReviewedAtMs: Long?,
+    val displayOrder: Long,
+    val pinned: Boolean,
 ) {
     val isActive: Boolean
         get() = status == MemoStatus.ACTIVE
@@ -57,6 +59,8 @@ data class Memo(
                 clearedAtMs = json.optLongOrNull("cleared_at_ms"),
                 reminderCount = json.optLong("reminder_count"),
                 lastReviewedAtMs = json.optLongOrNull("last_reviewed_at_ms"),
+                displayOrder = json.optLong("display_order", json.optLong("updated_at_ms")),
+                pinned = json.optBoolean("pinned", false),
             )
         }
     }

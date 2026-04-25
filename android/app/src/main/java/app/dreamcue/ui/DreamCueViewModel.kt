@@ -201,11 +201,7 @@ class DreamCueViewModel(
                 runCatching {
                     repository.initialize().getOrThrow()
                     val allMemos = repository.listAllMemos()
-                    val currentMemos = allMemos
-                        .asSequence()
-                        .filter { it.isActive }
-                        .sortedByDescending { it.updatedAtMs }
-                        .toList()
+                    val currentMemos = repository.listActiveMemos()
                     val historyMemos = allMemos
                         .asSequence()
                         .filter { !it.isActive }
@@ -215,7 +211,13 @@ class DreamCueViewModel(
                         currentMemos = currentMemos,
                         historyMemos = historyMemos,
                         searchResults = if (submittedSearchQuery.isBlank()) {
-                            emptyList()
+                            (currentMemos + historyMemos).map { memo ->
+                                SearchResult(
+                                    memo = memo,
+                                    score = 0.0,
+                                    matchedBy = listOf("recent"),
+                                )
+                            }
                         } else {
                             repository.searchMemos(submittedSearchQuery, limit = 20)
                         },
@@ -262,14 +264,58 @@ class DreamCueViewModel(
         )
     }
 
+    fun setMemoPinned(memoId: String, pinned: Boolean) {
+        val pendingDraft = pendingDetailDraftFor(memoId)
+        detailAutoSaveJob?.cancel()
+        runMutation(
+            action = {
+                pendingDraft?.let { repository.updateMemo(memoId, it) }
+                repository.setMemoPinned(memoId, pinned)
+            },
+            afterSuccess = {
+                if (uiState.selectedMemo?.id == memoId) {
+                    uiState = uiState.copy(selectedMemo = null, detailDraft = "")
+                }
+            },
+        )
+    }
+
     fun search() {
         val query = uiState.searchQuery.trim()
         uiState = uiState.copy(
             submittedSearchQuery = query,
             selectedScreen = MemoScreen.HISTORY,
-            searchResults = if (query.isBlank()) emptyList() else uiState.searchResults,
         )
         refresh()
+    }
+
+    fun reorderCurrentMemos(fromIndex: Int, toIndex: Int) {
+        val current = uiState.currentMemos.toMutableList()
+        if (fromIndex !in current.indices || toIndex !in current.indices || fromIndex == toIndex) {
+            return
+        }
+
+        val moved = current.removeAt(fromIndex)
+        current.add(toIndex, moved)
+        uiState = uiState.copy(currentMemos = current)
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    repository.initialize().getOrThrow()
+                    repository.reorderActiveMemos(current.map { it.id })
+                }
+            }
+            result.onSuccess { reordered ->
+                uiState = uiState.copy(currentMemos = reordered, errorMessage = null)
+                syncCoordinator.uploadAll(reordered)
+            }.onFailure { throwable ->
+                uiState = uiState.copy(
+                    errorMessage = throwable.message ?: "Reorder failed",
+                    nativeError = repository.nativeLoadError(),
+                )
+            }
+        }
     }
 
     fun clearMemo(memoId: String) {
@@ -307,14 +353,15 @@ class DreamCueViewModel(
 
     fun deleteMemo() {
         val memo = uiState.pendingDeleteMemo ?: return
+        var deletedAtMs: Long? = null
         detailAutoSaveJob?.cancel()
         runMutation(
             action = {
-                repository.deleteMemo(memo.id)
+                deletedAtMs = repository.deleteMemoWithTombstone(memo.id)
             },
             afterSuccess = {
                 NotificationHelper.cancelMemoReminder(repository.appContext, memo.id)
-                syncCoordinator.uploadDeletedMemo(memo.id)
+                syncCoordinator.uploadDeletedMemo(memo.id, deletedAtMs ?: System.currentTimeMillis())
                 uiState = uiState.copy(
                     pendingDeleteMemo = null,
                     selectedMemo = if (uiState.selectedMemo?.id == memo.id) null else uiState.selectedMemo,
@@ -434,7 +481,7 @@ class DreamCueViewModel(
         uiState = uiState.copy(
             currentMemos = uiState.currentMemos
                 .map { memo -> if (memo.id == updatedMemo.id) updatedMemo else memo }
-                .sortedByDescending { memo -> memo.updatedAtMs },
+                .sortedWith(activeMemoComparator),
             historyMemos = uiState.historyMemos
                 .map { memo -> if (memo.id == updatedMemo.id) updatedMemo else memo }
                 .sortedByDescending { memo -> memo.clearedAtMs ?: memo.updatedAtMs },
@@ -470,3 +517,7 @@ class DreamCueViewModel(
         }
     }
 }
+
+private val activeMemoComparator = compareByDescending<Memo> { it.pinned }
+    .thenByDescending { it.displayOrder }
+    .thenByDescending { it.updatedAtMs }

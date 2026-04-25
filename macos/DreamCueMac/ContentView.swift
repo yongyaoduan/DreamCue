@@ -11,81 +11,83 @@ struct ContentView: View {
     @State private var selectedMinute = 0
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            Divider().overlay(DreamCueStyle.border)
-            detail
-        }
-        .background(DreamCueStyle.canvas)
-        .frame(minWidth: 980, minHeight: 650)
-        .sheet(isPresented: $isNewCuePresented) {
-            NewCueSheet(
-                draft: $store.draft,
-                onCancel: {
+        ZStack {
+            HStack(spacing: 0) {
+                sidebar
+                Divider().overlay(DreamCueStyle.border)
+                detail
+            }
+            .background(DreamCueStyle.canvas)
+
+            if isNewCuePresented {
+                ModalOverlay(onDismiss: {
                     store.draft = ""
                     isNewCuePresented = false
-                },
-                onSave: {
-                    store.addMemo()
-                    isNewCuePresented = false
+                }) {
+                    NewCueSheet(
+                        draft: $store.draft,
+                        onCancel: {
+                            store.draft = ""
+                            isNewCuePresented = false
+                        },
+                        onSave: {
+                            store.addMemo()
+                            isNewCuePresented = false
+                        }
+                    )
                 }
-            )
-        }
-        .sheet(item: $selectedMemo) { memo in
-            CueDetailSheet(
-                memo: memo,
-                draft: $detailDraft,
-                reminderTime: store.reminderTimeText,
-                selectedHour: $selectedHour,
-                selectedMinute: $selectedMinute,
-                onSaveTime: {
-                    store.setReminderTime(hour: selectedHour, minute: selectedMinute)
-                },
-                onSave: {
-                    store.updateMemo(memo, content: detailDraft)
-                    selectedMemo = nil
-                },
-                onClear: {
-                    store.clearMemo(memo)
-                    selectedMemo = nil
-                },
-                onDelete: {
-                    store.deleteMemo(memo)
-                    selectedMemo = nil
+            }
+
+            if let memo = selectedMemo {
+                ModalOverlay(onDismiss: dismissDetailSavingDraft) {
+                    CueDetailSheet(
+                        memo: memo,
+                        draft: $detailDraft,
+                        onSave: {
+                            saveDetailAndDismiss(memo)
+                        },
+                        onClear: {
+                            store.clearMemo(memo)
+                            selectedMemo = nil
+                        },
+                        onReopen: {
+                            store.reopenMemo(memo)
+                            selectedMemo = nil
+                        },
+                        onSetPinned: { pinned in
+                            store.setMemoPinned(memo, pinned: pinned)
+                            selectedMemo = nil
+                        },
+                        onDelete: {
+                            store.deleteMemo(memo)
+                            selectedMemo = nil
+                        }
+                    )
                 }
-            )
-        }
-        .sheet(isPresented: $isTimePickerPresented) {
-            ReminderTimePickerSheet(
-                hour: $selectedHour,
-                minute: $selectedMinute,
-                onCancel: {
+            }
+
+            if isTimePickerPresented {
+                ModalOverlay(onDismiss: {
                     isTimePickerPresented = false
-                },
-                onSave: {
-                    store.setReminderTime(hour: selectedHour, minute: selectedMinute)
-                    isTimePickerPresented = false
+                }) {
+                    ReminderTimePickerSheet(
+                        hour: $selectedHour,
+                        minute: $selectedMinute,
+                        onCancel: {
+                            isTimePickerPresented = false
+                        },
+                        onTimeChanged: { hour, minute in
+                            store.setReminderTime(hour: hour, minute: minute)
+                        }
+                    )
                 }
-            )
+            }
         }
+        .frame(minWidth: 980, minHeight: 650)
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                DreamCueIcon(size: 46)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("DreamCue")
-                        .font(.system(size: 24, weight: .regular, design: .serif))
-                        .foregroundStyle(DreamCueStyle.ink)
-                    Text("Private cues. Gentle rhythm.")
-                        .font(.caption)
-                        .foregroundStyle(DreamCueStyle.muted)
-                }
-            }
-            .padding(.top, 18)
-            .padding(.bottom, 8)
-
+        VStack(spacing: 18) {
             VStack(spacing: 6) {
                 SidebarButton(title: "Today", systemImage: "house", isSelected: store.selectedTab == 0) {
                     store.selectedTab = 0
@@ -100,28 +102,12 @@ struct ContentView: View {
                     store.selectedTab = 3
                 }
             }
+            .padding(.top, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
             Spacer()
-
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(store.isSyncActive ? DreamCueStyle.sage : DreamCueStyle.border)
-                    .frame(width: 8, height: 8)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.isSyncActive ? "Syncing" : "Local")
-                        .font(.caption.weight(.semibold))
-                    Text(store.isSyncActive ? "Up to date" : "Sign in to sync")
-                        .font(.caption2)
-                        .foregroundStyle(DreamCueStyle.muted)
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(DreamCueStyle.panel.opacity(0.85), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
         }
-        .padding(.horizontal, 14)
-        .frame(width: 215)
+        .frame(width: 140)
         .background(DreamCueStyle.sidebar)
     }
 
@@ -133,7 +119,8 @@ struct ContentView: View {
                 currentMemos: store.currentMemos,
                 reminderTime: store.reminderTimeText,
                 onNewCue: { isNewCuePresented = true },
-                onOpen: openMemo
+                onOpen: openMemo,
+                onMove: store.moveCurrentMemo
             )
         case 1:
             ArchiveView(
@@ -144,9 +131,7 @@ struct ContentView: View {
         case 2:
             RhythmView(
                 dailyReminderEnabled: $store.dailyReminderEnabled,
-                quietHoursEnabled: $store.quietHoursEnabled,
                 reminderTime: store.reminderTimeText,
-                quietHours: store.quietHoursText,
                 onChangeTime: {
                     selectedHour = store.reminderHour
                     selectedMinute = store.reminderMinute
@@ -173,6 +158,20 @@ struct ContentView: View {
         selectedMinute = store.reminderMinute
         selectedMemo = memo
     }
+
+    private func saveDetailAndDismiss(_ memo: Memo) {
+        store.updateMemo(memo, content: detailDraft)
+        selectedMemo = nil
+    }
+
+    private func dismissDetailSavingDraft() {
+        guard let memo = selectedMemo else { return }
+        let trimmed = detailDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, trimmed != memo.content {
+            store.updateMemo(memo, content: detailDraft)
+        }
+        selectedMemo = nil
+    }
 }
 
 private struct TodayView: View {
@@ -180,6 +179,7 @@ private struct TodayView: View {
     let reminderTime: String
     let onNewCue: () -> Void
     let onOpen: (Memo) -> Void
+    let onMove: (Int, Int) -> Void
 
     var body: some View {
         ScrollView {
@@ -243,8 +243,15 @@ private struct TodayView: View {
                         EmptyCueCard()
                     } else {
                         VStack(spacing: 10) {
-                            ForEach(currentMemos) { memo in
-                                CueRow(memo: memo, onOpen: onOpen)
+                            ForEach(Array(currentMemos.enumerated()), id: \.element.id) { index, memo in
+                                CueRow(
+                                    memo: memo,
+                                    displayNumber: index + 1,
+                                    index: index,
+                                    rowCount: currentMemos.count,
+                                    onOpen: onOpen,
+                                    onMove: onMove
+                                )
                             }
                         }
                     }
@@ -297,8 +304,8 @@ private struct ArchiveView: View {
 
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(memos) { memo in
-                            ArchiveRow(memo: memo, onOpen: onOpen)
+                        ForEach(Array(memos.enumerated()), id: \.element.id) { index, memo in
+                            ArchiveRow(memo: memo, displayNumber: index + 1, onOpen: onOpen)
                             Divider().overlay(DreamCueStyle.border.opacity(0.6))
                         }
                     }
@@ -314,9 +321,7 @@ private struct ArchiveView: View {
 
 private struct RhythmView: View {
     @Binding var dailyReminderEnabled: Bool
-    @Binding var quietHoursEnabled: Bool
     let reminderTime: String
-    let quietHours: String
     let onChangeTime: () -> Void
 
     var body: some View {
@@ -341,23 +346,6 @@ private struct RhythmView: View {
                             .font(.title2.monospacedDigit())
                         Button("Change Time", action: onChangeTime)
                     }
-                }
-            }
-
-            RhythmCard {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Toggle("Quiet Hours", isOn: $quietHoursEnabled)
-                            .toggleStyle(.switch)
-                            .accessibilityIdentifier("Quiet Hours Toggle")
-                        Text("Mute reminders during your rest.")
-                            .font(.caption)
-                            .foregroundStyle(DreamCueStyle.muted)
-                    }
-                    Spacer()
-                    Text(quietHours)
-                        .font(.body.monospacedDigit())
-                        .foregroundStyle(DreamCueStyle.ink)
                 }
             }
 
@@ -396,8 +384,6 @@ private struct AccountView: View {
             Text("Account")
                 .font(.system(size: 30, weight: .regular, design: .serif))
                 .foregroundStyle(DreamCueStyle.ink)
-            Text(isSyncActive ? "Private sync is active." : "Private sync across devices.")
-                .foregroundStyle(DreamCueStyle.muted)
 
             if isSyncActive {
                 signedInCard
@@ -441,7 +427,7 @@ private struct AccountView: View {
             }
         }
         .padding(20)
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(DreamCueStyle.border, lineWidth: 1))
         .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
@@ -464,11 +450,9 @@ private struct AccountView: View {
                     .background(.white.opacity(0.14), in: Circle())
             }
             Text(compactAccountEmail(signedInEmail))
-                .font(.system(size: 24, weight: .bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text("Private sync is active on this account.")
-                .foregroundStyle(.white.opacity(0.72))
+                    .font(.system(size: 24, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Last sync")
@@ -483,9 +467,112 @@ private struct AccountView: View {
         }
         .foregroundStyle(.white)
         .padding(22)
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(DreamCueStyle.deepGreen, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
+    }
+}
+
+private struct ModalOverlay<Content: View>: View {
+    let onDismiss: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.22)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+            content
+        }
+        .transition(.opacity)
+    }
+}
+
+private struct CommittingTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    let accessibilityLabel: String
+    let onCommit: () -> Void
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = CommitTextView()
+        textView.onCommit = onCommit
+        textView.delegate = context.coordinator
+        textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.textColor = NSColor(DreamCueStyle.ink)
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.textContainerInset = NSSize(width: 12, height: 12)
+        textView.textContainer?.widthTracksTextView = true
+        textView.setAccessibilityLabel(accessibilityLabel)
+        textView.setAccessibilityIdentifier(accessibilityLabel)
+
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.update(text: $text, onCommit: onCommit)
+        guard let textView = scrollView.documentView as? CommitTextView else { return }
+        textView.onCommit = onCommit
+        guard textView.string != text else { return }
+        textView.string = text
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onCommit: onCommit)
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        private var text: Binding<String>
+        private var onCommit: () -> Void
+
+        init(text: Binding<String>, onCommit: @escaping () -> Void) {
+            self.text = text
+            self.onCommit = onCommit
+        }
+
+        func update(text: Binding<String>, onCommit: @escaping () -> Void) {
+            self.text = text
+            self.onCommit = onCommit
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            text.wrappedValue = textView.string
+        }
+
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                onCommit()
+                return true
+            }
+            return false
+        }
+    }
+}
+
+private final class CommitTextView: NSTextView {
+    var onCommit: (() -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        let isReturn = event.keyCode == 36 || event.keyCode == 76
+        guard isReturn else {
+            super.keyDown(with: event)
+            return
+        }
+
+        if event.modifierFlags.contains(.command) {
+            insertText("\n", replacementRange: selectedRange())
+        } else {
+            onCommit?()
+        }
     }
 }
 
@@ -496,44 +583,37 @@ private struct NewCueSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("New Cue")
-                    .font(.headline)
-                Spacer()
-            }
-            TextEditor(text: $draft)
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(10)
+            Text("New Cue")
+                .font(.headline)
+            CommittingTextEditor(text: $draft, accessibilityLabel: "Cue Text", onCommit: onSave)
+                .frame(maxWidth: .infinity, minHeight: 220)
                 .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
-                .frame(width: 520, height: 260)
-                .accessibilityLabel("Cue Text")
-                .accessibilityIdentifier("Cue Text")
-            HStack {
+            HStack(spacing: 10) {
                 Spacer()
                 Button("Cancel", action: onCancel)
+                    .buttonStyle(SecondaryButtonStyle())
                 Button("Save", action: onSave)
                     .buttonStyle(PrimaryButtonStyle())
-                    .keyboardShortcut(.return, modifiers: .command)
+                    .keyboardShortcut(.return, modifiers: [])
             }
         }
-        .padding(20)
+        .padding(22)
+        .frame(width: 560, alignment: .leading)
         .background(DreamCueStyle.canvas)
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
     }
 }
 
 private struct CueDetailSheet: View {
     let memo: Memo
     @Binding var draft: String
-    let reminderTime: String
-    @Binding var selectedHour: Int
-    @Binding var selectedMinute: Int
-    let onSaveTime: () -> Void
     let onSave: () -> Void
     let onClear: () -> Void
+    let onReopen: () -> Void
+    let onSetPinned: (Bool) -> Void
     let onDelete: () -> Void
-    @State private var isTimePickerPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -550,160 +630,102 @@ private struct CueDetailSheet: View {
                 Spacer()
                 Button("Save", action: onSave)
                     .buttonStyle(PrimaryButtonStyle())
+                    .keyboardShortcut(.return, modifiers: [])
             }
-            .padding(18)
+            .padding(16)
 
-            TextEditor(text: $draft)
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(12)
-                .frame(height: 230)
+            CommittingTextEditor(text: $draft, accessibilityLabel: "Cue Text", onCommit: onSave)
+                .frame(height: 176)
                 .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
-                .padding(.horizontal, 18)
-                .accessibilityLabel("Cue Text")
-                .accessibilityIdentifier("Cue Text")
-
-            HStack {
-                Image("IconRemind")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
-                Text("Reminder scheduled")
-                    .font(.caption.weight(.semibold))
-                Text("Today, \(reminderTime)")
-                    .font(.caption)
-                    .foregroundStyle(DreamCueStyle.muted)
-                Spacer()
-                Button("Change Time") {
-                    isTimePickerPresented = true
-                }
-            }
-            .padding(12)
-            .background(DreamCueStyle.sage.opacity(0.12))
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
+                .padding(.horizontal, 16)
 
             HStack(spacing: 12) {
-                IconActionButton(title: "Delete", accessibility: "Delete Cue", assetName: "IconDelete", action: onDelete)
-                IconActionButton(title: "Remind", accessibility: "Remind", assetName: "IconRemind") {
-                    isTimePickerPresented = true
+                IconActionButton(accessibility: "Delete Cue", assetName: "IconDelete", tint: DreamCueStyle.deleteRed, action: onDelete)
+                if memo.isActive {
+                    IconActionButton(
+                        accessibility: memo.pinned ? "Unpin Cue" : "Pin Cue",
+                        assetName: "IconPin",
+                        tint: DreamCueStyle.muted,
+                        action: { onSetPinned(!memo.pinned) }
+                    )
+                    IconActionButton(accessibility: "Complete Cue", assetName: "IconComplete", tint: DreamCueStyle.deepGreen, action: onClear)
+                } else {
+                    IconActionButton(accessibility: "Return to Today", assetName: "IconReturn", tint: DreamCueStyle.muted, action: onReopen)
                 }
-                IconActionButton(title: "Complete", accessibility: "Complete Cue", assetName: "IconComplete", action: onClear)
             }
-            .padding(18)
+            .padding(16)
         }
-        .frame(width: 590)
+        .frame(width: 520)
         .background(DreamCueStyle.canvas)
-        .sheet(isPresented: $isTimePickerPresented) {
-            ReminderTimePickerSheet(
-                hour: $selectedHour,
-                minute: $selectedMinute,
-                onCancel: {
-                    isTimePickerPresented = false
-                },
-                onSave: {
-                    onSaveTime()
-                    isTimePickerPresented = false
-                }
-            )
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
     }
 }
 
 private struct ReminderTimePickerSheet: View {
     @Binding var hour: Int
     @Binding var minute: Int
+    @State private var selectedDate: Date
     let onCancel: () -> Void
-    let onSave: () -> Void
+    let onTimeChanged: (Int, Int) -> Void
 
-    private let minutes = [0, 10, 15, 30, 45, 50]
+    init(
+        hour: Binding<Int>,
+        minute: Binding<Int>,
+        onCancel: @escaping () -> Void,
+        onTimeChanged: @escaping (Int, Int) -> Void
+    ) {
+        _hour = hour
+        _minute = minute
+        let date = Calendar.current.date(
+            bySettingHour: hour.wrappedValue,
+            minute: minute.wrappedValue,
+            second: 0,
+            of: Date()
+        ) ?? Date()
+        _selectedDate = State(initialValue: date)
+        self.onCancel = onCancel
+        self.onTimeChanged = onTimeChanged
+    }
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             Text("Select reminder time")
                 .font(.headline)
-            HStack(spacing: 18) {
-                DateChip(day: "Wed", date: "Apr 23", isSelected: false)
-                DateChip(day: "Thu", date: "Apr 24", isSelected: false)
-                DateChip(day: "Fri", date: "Apr 25", isSelected: true)
-                DateChip(day: "Sat", date: "Apr 26", isSelected: false)
-                DateChip(day: "Sun", date: "Apr 27", isSelected: false)
-            }
-            HStack(spacing: 24) {
-                RollingNumberColumn(
-                    title: "Hour",
-                    values: Array(0..<24),
-                    selection: $hour
-                )
-
-                Text(":")
-                    .font(.title.weight(.bold))
-                    .foregroundStyle(DreamCueStyle.deepGreen)
-
-                RollingNumberColumn(
-                    title: "Minute",
-                    values: minutes,
-                    selection: $minute
-                )
-            }
-            .padding(.vertical, 8)
+            DatePicker(
+                "Reminder time",
+                selection: $selectedDate,
+                displayedComponents: .hourAndMinute
+            )
+            .labelsHidden()
+            .datePickerStyle(.automatic)
+            .controlSize(.large)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
             .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 12))
-            HStack(spacing: 12) {
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(SecondaryButtonStyle())
-                Button("Save Time", action: onSave)
-                    .buttonStyle(PrimaryButtonStyle())
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(DreamCueStyle.border, lineWidth: 1))
+            .onChange(of: selectedDate) { _, newDate in
+                applyTime(from: newDate)
             }
+            Button("Done", action: onCancel)
+                .buttonStyle(PrimaryButtonStyle())
         }
         .padding(24)
+        .frame(width: 360)
         .background(DreamCueStyle.canvas)
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
     }
-}
 
-private struct RollingNumberColumn: View {
-    let title: String
-    let values: [Int]
-    @Binding var selection: Int
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                VStack(spacing: 0) {
-                    ForEach(values, id: \.self) { value in
-                        Button {
-                            selection = value
-                            withAnimation(.snappy(duration: 0.18)) {
-                                proxy.scrollTo(value, anchor: .center)
-                            }
-                        } label: {
-                            Text(String(format: "%02d", value))
-                                .font(.title3.monospacedDigit().weight(selection == value ? .bold : .regular))
-                                .foregroundStyle(selection == value ? DreamCueStyle.deepGreen : DreamCueStyle.muted)
-                                .frame(width: 84, height: 34)
-                                .background(selection == value ? DreamCueStyle.selected : .clear, in: RoundedRectangle(cornerRadius: 7))
-                        }
-                        .buttonStyle(.plain)
-                        .id(value)
-                    }
-                }
-                .padding(.vertical, 58)
-            }
-            .frame(width: 94, height: 150)
-            .background(
-                LinearGradient(
-                    colors: [DreamCueStyle.panel.opacity(0.15), DreamCueStyle.panel, DreamCueStyle.panel.opacity(0.15)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                in: RoundedRectangle(cornerRadius: 12)
-            )
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(DreamCueStyle.border.opacity(0.7), lineWidth: 1))
-            .accessibilityLabel(title)
-            .onAppear {
-                proxy.scrollTo(selection, anchor: .center)
-            }
-        }
+    private func applyTime(from date: Date) {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        let nextHour = components.hour ?? hour
+        let nextMinute = components.minute ?? minute
+        hour = nextHour
+        minute = nextMinute
+        onTimeChanged(nextHour, nextMinute)
     }
 }
 
@@ -721,30 +743,43 @@ private struct SidebarButton: View {
                     .frame(width: 22)
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
-                Spacer()
+                    .lineLimit(1)
+                Spacer(minLength: 0)
             }
             .foregroundStyle(isSelected ? DreamCueStyle.deepGreen : DreamCueStyle.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(isSelected ? DreamCueStyle.selected : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.leading, 24)
+            .padding(.trailing, 12)
+            .frame(height: 38)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? DreamCueStyle.selected : .clear)
+        .contentShape(Rectangle())
         .accessibilityLabel(title)
     }
 }
 
 private struct CueRow: View {
     let memo: Memo
+    let displayNumber: Int
+    let index: Int
+    let rowCount: Int
     let onOpen: (Memo) -> Void
+    let onMove: (Int, Int) -> Void
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         Button {
             onOpen(memo)
         } label: {
             HStack(spacing: 14) {
-                Circle()
-                    .fill(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
-                    .frame(width: 7, height: 7)
+                Text("#\(String(format: "%02d", displayNumber))")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
+                    .frame(width: 38, height: 26)
+                    .background(memo.pinned ? .white.opacity(0.62) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(memo.content)
                         .font(.headline)
@@ -755,6 +790,11 @@ private struct CueRow: View {
                         .foregroundStyle(DreamCueStyle.muted)
                 }
                 Spacer()
+                if memo.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DreamCueStyle.muted)
+                }
                 Text(memo.isActive ? "Current" : "Cleared")
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)
@@ -765,16 +805,33 @@ private struct CueRow: View {
                     .foregroundStyle(DreamCueStyle.muted)
             }
             .padding(14)
-            .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 10))
+            .background(memo.pinned ? DreamCueStyle.border.opacity(0.28) : DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(DreamCueStyle.border, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(memo.content)
+        .offset(y: dragOffset)
+        .gesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    dragOffset = value.translation.height
+                }
+                .onEnded { value in
+                    let rowStep = Int((value.translation.height / 78).rounded())
+                    let target = min(max(index + rowStep, 0), rowCount - 1)
+                    dragOffset = 0
+                    if target != index {
+                        onMove(index, target)
+                    }
+                }
+        )
     }
 }
 
 private struct ArchiveRow: View {
     let memo: Memo
+    let displayNumber: Int
     let onOpen: (Memo) -> Void
 
     var body: some View {
@@ -782,9 +839,11 @@ private struct ArchiveRow: View {
             onOpen(memo)
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: memo.isActive ? "doc.text" : "archivebox")
-                    .foregroundStyle(DreamCueStyle.muted)
-                    .frame(width: 22)
+                Text("#\(String(format: "%02d", displayNumber))")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
+                    .frame(width: 38, height: 24)
+                    .background(memo.pinned ? DreamCueStyle.border.opacity(0.28) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(memo.content)
                         .font(.body.weight(.semibold))
@@ -795,21 +854,28 @@ private struct ArchiveRow: View {
                         .foregroundStyle(DreamCueStyle.muted)
                 }
                 Spacer()
+                if memo.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DreamCueStyle.muted)
+                }
                 Text(memo.isActive ? "Current" : "Cleared")
                     .font(.caption)
                     .foregroundStyle(DreamCueStyle.deepGreen)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
                     .background(DreamCueStyle.selected, in: Capsule())
-                Text(formattedDate(memo.updatedAtMs))
-                    .font(.caption)
-                    .foregroundStyle(DreamCueStyle.muted)
-                    .frame(width: 145, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(DreamCueStyle.muted)
-            }
+            Text(formattedDate(memo.updatedAtMs))
+                .font(.caption)
+                .foregroundStyle(DreamCueStyle.muted)
+                .frame(width: 145, alignment: .leading)
+            Image(systemName: "chevron.right")
+                .foregroundStyle(DreamCueStyle.muted)
+        }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(memo.content)
@@ -867,28 +933,29 @@ private struct InfoCard: View {
     let iconName: String?
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 3)
                 .fill(DreamCueStyle.gold.opacity(0.24))
-                .frame(width: 5)
-            VStack(alignment: .leading, spacing: 8) {
+                .frame(width: 4, height: 30)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.title3.weight(.semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(DreamCueStyle.ink)
                 Text(content)
+                    .font(.caption)
                     .foregroundStyle(DreamCueStyle.muted)
             }
             Spacer()
             if let iconName {
                 Image(systemName: iconName)
-                    .font(.title3.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(DreamCueStyle.deepGreen)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 30, height: 30)
                     .background(DreamCueStyle.selected, in: Circle())
             }
         }
-        .padding(18)
-        .frame(maxWidth: 560, alignment: .leading)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(DreamCueStyle.border, lineWidth: 1))
     }
@@ -900,30 +967,27 @@ private struct RhythmCard<Content: View>: View {
     var body: some View {
         content
             .padding(18)
-            .frame(maxWidth: 560, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(DreamCueStyle.border, lineWidth: 1))
     }
 }
 
 private struct IconActionButton: View {
-    let title: String
     let accessibility: String
     let assetName: String
+    let tint: Color
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                Image(assetName)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 24, height: 24)
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(DreamCueStyle.ink)
-            }
-            .frame(maxWidth: .infinity, minHeight: 58)
+            Image(assetName)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 21, height: 21)
+                .foregroundStyle(tint)
+            .frame(maxWidth: .infinity, minHeight: 48)
             .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
         }
@@ -943,26 +1007,6 @@ private struct FilterPill: View {
             .padding(.vertical, 6)
             .background(DreamCueStyle.panel, in: Capsule())
             .overlay(Capsule().stroke(DreamCueStyle.border, lineWidth: 1))
-    }
-}
-
-private struct DateChip: View {
-    let day: String
-    let date: String
-    let isSelected: Bool
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(day)
-                .font(.caption.weight(.semibold))
-            Text(date)
-                .font(.caption2)
-        }
-        .foregroundStyle(isSelected ? .white : DreamCueStyle.muted)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(isSelected ? DreamCueStyle.deepGreen : DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
     }
 }
 
@@ -1058,6 +1102,7 @@ private enum DreamCueStyle {
     static let deepGreen = Color(red: 0.047, green: 0.240, blue: 0.180)
     static let sage = Color(red: 0.180, green: 0.460, blue: 0.330)
     static let gold = Color(red: 0.790, green: 0.640, blue: 0.420)
+    static let deleteRed = Color(red: 0.770, green: 0.380, blue: 0.290)
     static let ink = Color(red: 0.080, green: 0.120, blue: 0.105)
     static let muted = Color(red: 0.360, green: 0.400, blue: 0.380)
     static let border = Color(red: 0.825, green: 0.800, blue: 0.735)

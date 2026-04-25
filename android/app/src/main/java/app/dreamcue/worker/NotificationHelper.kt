@@ -23,8 +23,9 @@ import java.util.Date
 import java.util.Locale
 
 object NotificationHelper {
-    private const val CHANNEL_ID = "daily_memo_alarm_v2"
-    private const val CHANNEL_NAME = "Memo Alarm Reminder"
+    private const val CHANNEL_ID = "daily_memo_notification_v1"
+    private const val CHANNEL_NAME = "Memo Reminder"
+    private const val SUMMARY_NOTIFICATION_ID = 3402
     private const val TAG = "NotificationHelper"
 
     fun ensureChannel(context: Context) {
@@ -33,12 +34,11 @@ object NotificationHelper {
         }
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val channel = NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_HIGH,
+            NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
             description = "Daily reminder for each memo that still needs attention"
             enableLights(true)
@@ -47,7 +47,7 @@ object NotificationHelper {
             setSound(
                 sound,
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build(),
             )
@@ -66,7 +66,8 @@ object NotificationHelper {
             return
         }
 
-        memos.forEach { memo ->
+        val plan = ReminderNotificationPlan.fromMemos(memos)
+        plan.individualMemos.forEach { memo ->
             Log.d(TAG, "Posting reminder for memo=${memo.id}")
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -80,13 +81,13 @@ object NotificationHelper {
             )
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle("Memo Reminder")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Pinned Cue")
                 .setContentText(memo.content)
                 .setSubText("Added ${formatTimestamp(memo.createdAtMs)}")
                 .setStyle(NotificationCompat.BigTextStyle().bigText(memo.content))
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setAutoCancel(false)
                 .setOnlyAlertOnce(false)
@@ -94,6 +95,30 @@ object NotificationHelper {
                 .build()
 
             NotificationManagerCompat.from(context).notify(notificationIdForMemo(memo.id), notification)
+        }
+        if (plan.summaryCount > 0) {
+            val openAppIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                SUMMARY_NOTIFICATION_ID,
+                openAppIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("DreamCue")
+                .setContentText(plan.summaryText)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(false)
+                .setOnlyAlertOnce(false)
+                .setContentIntent(pendingIntent)
+                .build()
+
+            NotificationManagerCompat.from(context).notify(SUMMARY_NOTIFICATION_ID, notification)
         }
     }
 

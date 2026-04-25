@@ -65,6 +65,10 @@ pub struct Memo {
     pub cleared_at_ms: Option<i64>,
     pub reminder_count: i64,
     pub last_reviewed_at_ms: Option<i64>,
+    #[serde(default)]
+    pub display_order: i64,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

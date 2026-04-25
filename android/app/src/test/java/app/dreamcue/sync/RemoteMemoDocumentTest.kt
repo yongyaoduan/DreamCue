@@ -19,6 +19,8 @@ class RemoteMemoDocumentTest {
             clearedAtMs = null,
             reminderCount = 3,
             lastReviewedAtMs = 1_500,
+            displayOrder = 2_000,
+            pinned = true,
         )
 
         val document = RemoteMemoDocument.fromMemo(memo).toMap()
@@ -26,6 +28,8 @@ class RemoteMemoDocumentTest {
 
         assertEquals(memo, decoded)
         assertFalse(document.getValue("deleted") as Boolean)
+        assertEquals(2_000L, document.getValue("display_order"))
+        assertEquals(true, document.getValue("pinned"))
     }
 
     @Test

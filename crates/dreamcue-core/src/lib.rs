@@ -1,6 +1,7 @@
 mod models;
 mod search;
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
@@ -50,6 +51,8 @@ impl MemoService {
             cleared_at_ms: None,
             reminder_count: 0,
             last_reviewed_at_ms: None,
+            display_order: at_ms,
+            pinned: false,
         };
 
         let tx = self
@@ -65,8 +68,10 @@ impl MemoService {
                 updated_at_ms,
                 cleared_at_ms,
                 reminder_count,
-                last_reviewed_at_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                last_reviewed_at_ms,
+                display_order,
+                pinned
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 &memo.id,
                 &memo.content,
@@ -75,7 +80,9 @@ impl MemoService {
                 memo.updated_at_ms,
                 memo.cleared_at_ms,
                 memo.reminder_count,
-                memo.last_reviewed_at_ms
+                memo.last_reviewed_at_ms,
+                memo.display_order,
+                memo.pinned as i64
             ],
         )
         .context("failed to insert memo")?;
@@ -217,9 +224,10 @@ impl MemoService {
              SET status = ?,
                  updated_at_ms = ?,
                  cleared_at_ms = NULL,
-                 last_reviewed_at_ms = NULL
+                 last_reviewed_at_ms = NULL,
+                 display_order = ?
              WHERE id = ?",
-            params![MemoStatus::Active.as_str(), at_ms, memo_id],
+            params![MemoStatus::Active.as_str(), at_ms, at_ms, memo_id],
         )
         .with_context(|| format!("failed to reopen memo {memo_id}"))?;
         Self::insert_event_tx(
@@ -231,6 +239,35 @@ impl MemoService {
             at_ms,
         )?;
         tx.commit().context("failed to commit reopen memo")?;
+
+        self.get_memo(memo_id)
+    }
+
+    pub fn set_memo_pinned(&mut self, memo_id: &str, pinned: bool) -> Result<Memo> {
+        self.set_memo_pinned_at(memo_id, pinned, now_ms())
+    }
+
+    pub fn set_memo_pinned_at(
+        &mut self,
+        memo_id: &str,
+        pinned: bool,
+        at_ms: i64,
+    ) -> Result<Memo> {
+        let existing = self.get_memo(memo_id)?;
+        if existing.pinned == pinned {
+            return Ok(existing);
+        }
+
+        self.conn
+            .execute(
+                "UPDATE memos
+                 SET pinned = ?,
+                     display_order = ?,
+                     updated_at_ms = ?
+                 WHERE id = ?",
+                params![pinned as i64, at_ms, at_ms, memo_id],
+            )
+            .with_context(|| format!("failed to update pin state for memo {memo_id}"))?;
 
         self.get_memo(memo_id)
     }
@@ -265,11 +302,60 @@ impl MemoService {
 
     pub fn apply_remote_memo(&mut self, memo: &Memo) -> Result<Memo> {
         normalize_content(&memo.content)?;
+        let remote_display_order = normalized_display_order(memo);
 
         if let Some(existing) = self.get_memo_optional(&memo.id)? {
-            if existing.updated_at_ms > memo.updated_at_ms {
+            let remote_order_is_newer = remote_display_order > existing.display_order;
+            if existing.updated_at_ms > memo.updated_at_ms && !remote_order_is_newer {
                 return Ok(existing);
             }
+
+            let remote_content_is_newer = memo.updated_at_ms >= existing.updated_at_ms;
+            let content = if remote_content_is_newer {
+                memo.content.as_str()
+            } else {
+                existing.content.as_str()
+            };
+            let status = if remote_content_is_newer {
+                memo.status.as_str()
+            } else {
+                existing.status.as_str()
+            };
+            let created_at_ms = if remote_content_is_newer {
+                memo.created_at_ms
+            } else {
+                existing.created_at_ms
+            };
+            let updated_at_ms = if remote_content_is_newer {
+                memo.updated_at_ms
+            } else {
+                existing.updated_at_ms
+            };
+            let cleared_at_ms = if remote_content_is_newer {
+                memo.cleared_at_ms
+            } else {
+                existing.cleared_at_ms
+            };
+            let reminder_count = if remote_content_is_newer {
+                memo.reminder_count
+            } else {
+                existing.reminder_count
+            };
+            let last_reviewed_at_ms = if remote_content_is_newer {
+                memo.last_reviewed_at_ms
+            } else {
+                existing.last_reviewed_at_ms
+            };
+            let display_order = if remote_order_is_newer {
+                remote_display_order
+            } else {
+                existing.display_order
+            };
+            let pinned = if remote_order_is_newer {
+                memo.pinned
+            } else {
+                existing.pinned
+            };
 
             self.conn
                 .execute(
@@ -280,16 +366,20 @@ impl MemoService {
                          updated_at_ms = ?,
                          cleared_at_ms = ?,
                          reminder_count = ?,
-                         last_reviewed_at_ms = ?
+                         last_reviewed_at_ms = ?,
+                         display_order = ?,
+                         pinned = ?
                      WHERE id = ?",
                     params![
-                        &memo.content,
-                        memo.status.as_str(),
-                        memo.created_at_ms,
-                        memo.updated_at_ms,
-                        memo.cleared_at_ms,
-                        memo.reminder_count,
-                        memo.last_reviewed_at_ms,
+                        content,
+                        status,
+                        created_at_ms,
+                        updated_at_ms,
+                        cleared_at_ms,
+                        reminder_count,
+                        last_reviewed_at_ms,
+                        display_order,
+                        pinned as i64,
                         &memo.id
                     ],
                 )
@@ -305,8 +395,10 @@ impl MemoService {
                         updated_at_ms,
                         cleared_at_ms,
                         reminder_count,
-                        last_reviewed_at_ms
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        last_reviewed_at_ms,
+                        display_order,
+                        pinned
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     params![
                         &memo.id,
                         &memo.content,
@@ -315,7 +407,9 @@ impl MemoService {
                         memo.updated_at_ms,
                         memo.cleared_at_ms,
                         memo.reminder_count,
-                        memo.last_reviewed_at_ms
+                        memo.last_reviewed_at_ms,
+                        remote_display_order,
+                        memo.pinned as i64
                     ],
                 )
                 .with_context(|| format!("failed to insert remote memo {}", memo.id))?;
@@ -325,10 +419,58 @@ impl MemoService {
     }
 
     pub fn delete_remote_memo(&mut self, memo_id: &str) -> Result<()> {
-        if self.get_memo_optional(memo_id)?.is_none() {
+        self.delete_remote_memo_at(memo_id, i64::MAX)
+    }
+
+    pub fn delete_remote_memo_at(&mut self, memo_id: &str, deleted_at_ms: i64) -> Result<()> {
+        let Some(existing) = self.get_memo_optional(memo_id)? else {
+            return Ok(());
+        };
+        if existing.updated_at_ms > deleted_at_ms {
             return Ok(());
         }
         self.delete_memo(memo_id)
+    }
+
+    pub fn reorder_active_memos(&mut self, ordered_ids: &[String]) -> Result<Vec<Memo>> {
+        let active = self.list_active_memos()?;
+        if active.is_empty() {
+            return Ok(active);
+        }
+
+        let active_ids: HashSet<&str> = active.iter().map(|memo| memo.id.as_str()).collect();
+        let mut seen = HashSet::new();
+        let mut ordered = Vec::new();
+
+        for memo_id in ordered_ids {
+            if active_ids.contains(memo_id.as_str()) && seen.insert(memo_id.clone()) {
+                ordered.push(memo_id.clone());
+            }
+        }
+
+        for memo in active {
+            if seen.insert(memo.id.clone()) {
+                ordered.push(memo.id);
+            }
+        }
+
+        let now = now_ms();
+        let tx = self
+            .conn
+            .transaction()
+            .context("failed to start transaction")?;
+        for (offset, memo_id) in ordered.iter().enumerate() {
+            tx.execute(
+                "UPDATE memos
+                 SET display_order = ?
+                 WHERE id = ? AND status = 'active'",
+                params![now - offset as i64, memo_id],
+            )
+            .with_context(|| format!("failed to reorder memo {memo_id}"))?;
+        }
+        tx.commit().context("failed to commit memo reorder")?;
+
+        self.list_active_memos()
     }
 
     pub fn get_memo(&self, memo_id: &str) -> Result<Memo> {
@@ -337,7 +479,11 @@ impl MemoService {
     }
 
     pub fn list_active_memos(&self) -> Result<Vec<Memo>> {
-        self.query_memos("SELECT * FROM memos WHERE status = 'active' ORDER BY updated_at_ms DESC")
+        self.query_memos(
+            "SELECT * FROM memos
+             WHERE status = 'active'
+             ORDER BY pinned DESC, display_order DESC, updated_at_ms DESC",
+        )
     }
 
     pub fn list_all_memos(&self) -> Result<Vec<Memo>> {
@@ -407,7 +553,9 @@ impl MemoService {
                     updated_at_ms INTEGER NOT NULL,
                     cleared_at_ms INTEGER,
                     reminder_count INTEGER NOT NULL DEFAULT 0,
-                    last_reviewed_at_ms INTEGER
+                    last_reviewed_at_ms INTEGER,
+                    display_order INTEGER NOT NULL DEFAULT 0,
+                    pinned INTEGER NOT NULL DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS memo_events (
@@ -422,10 +570,40 @@ impl MemoService {
 
                 CREATE INDEX IF NOT EXISTS idx_memos_status_created
                     ON memos(status, created_at_ms DESC);
+                CREATE INDEX IF NOT EXISTS idx_memos_active_order
+                    ON memos(status, pinned DESC, display_order DESC);
                 CREATE INDEX IF NOT EXISTS idx_events_memo_created
                     ON memo_events(memo_id, created_at_ms DESC);",
             )
             .context("failed to initialize schema")?;
+        self.ensure_memo_column("display_order", "INTEGER NOT NULL DEFAULT 0")?;
+        self.ensure_memo_column("pinned", "INTEGER NOT NULL DEFAULT 0")?;
+        self.conn
+            .execute(
+                "UPDATE memos
+                 SET display_order = updated_at_ms
+                 WHERE display_order = 0",
+                [],
+            )
+            .context("failed to backfill memo order")?;
+        Ok(())
+    }
+
+    fn ensure_memo_column(&self, name: &str, definition: &str) -> Result<()> {
+        let mut statement = self
+            .conn
+            .prepare("PRAGMA table_info(memos)")
+            .context("failed to inspect memo schema")?;
+        let column_names = statement
+            .query_map([], |row| row.get::<_, String>("name"))
+            .context("failed to read memo schema")?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .context("failed to parse memo schema")?;
+        if !column_names.iter().any(|column| column == name) {
+            self.conn
+                .execute(&format!("ALTER TABLE memos ADD COLUMN {name} {definition}"), [])
+                .with_context(|| format!("failed to add memo column {name}"))?;
+        }
         Ok(())
     }
 
@@ -490,6 +668,8 @@ impl MemoService {
             cleared_at_ms: row.get("cleared_at_ms")?,
             reminder_count: row.get("reminder_count")?,
             last_reviewed_at_ms: row.get("last_reviewed_at_ms")?,
+            display_order: row.get("display_order")?,
+            pinned: row.get::<_, i64>("pinned")? != 0,
         })
     }
 
@@ -510,6 +690,14 @@ fn normalize_content(content: &str) -> Result<&str> {
         return Err(anyhow!("memo content cannot be blank"));
     }
     Ok(content)
+}
+
+fn normalized_display_order(memo: &Memo) -> i64 {
+    if memo.display_order == 0 {
+        memo.updated_at_ms
+    } else {
+        memo.display_order
+    }
 }
 
 fn now_ms() -> i64 {
@@ -645,6 +833,8 @@ mod tests {
             cleared_at_ms: None,
             reminder_count: 0,
             last_reviewed_at_ms: None,
+            display_order: ts(2026, 3, 10, 8, 0),
+            pinned: false,
         };
 
         let applied = service.apply_remote_memo(&remote).expect("apply");
@@ -671,6 +861,8 @@ mod tests {
             cleared_at_ms: None,
             reminder_count: 0,
             last_reviewed_at_ms: None,
+            display_order: ts(2026, 3, 10, 8, 30),
+            pinned: false,
         };
 
         let applied = service.apply_remote_memo(&remote).expect("apply");
@@ -697,6 +889,8 @@ mod tests {
             cleared_at_ms: None,
             reminder_count: 0,
             last_reviewed_at_ms: None,
+            display_order: ts(2026, 3, 10, 9, 0),
+            pinned: false,
         };
 
         let applied = service.apply_remote_memo(&remote).expect("apply");
@@ -719,5 +913,117 @@ mod tests {
         service.delete_remote_memo(&memo.id).expect("delete again");
 
         assert!(service.get_memo_optional(&memo.id).expect("lookup").is_none());
+    }
+
+    #[test]
+    fn stale_remote_deletion_does_not_remove_newer_local_memo() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let memo = service
+            .add_memo_at("Keep newer local memo", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        service
+            .update_memo_at(&memo.id, "Keep updated local memo", ts(2026, 3, 10, 9, 0))
+            .expect("update");
+
+        service
+            .delete_remote_memo_at(&memo.id, ts(2026, 3, 10, 8, 30))
+            .expect("remote delete");
+
+        assert!(service.get_memo_optional(&memo.id).expect("lookup").is_some());
+    }
+
+    #[test]
+    fn reordering_active_memos_persists_custom_order() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let first = service
+            .add_memo_at("First cue", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        let second = service
+            .add_memo_at("Second cue", ts(2026, 3, 10, 8, 1))
+            .expect("create");
+        let third = service
+            .add_memo_at("Third cue", ts(2026, 3, 10, 8, 2))
+            .expect("create");
+
+        service
+            .reorder_active_memos(&[first.id.clone(), third.id.clone(), second.id.clone()])
+            .expect("reorder");
+
+        let active = service.list_active_memos().expect("list active");
+        assert_eq!(
+            active.iter().map(|memo| memo.id.as_str()).collect::<Vec<_>>(),
+            vec![first.id.as_str(), third.id.as_str(), second.id.as_str()]
+        );
+    }
+
+    #[test]
+    fn reordering_active_memos_keeps_updated_timestamps_stable() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let first = service
+            .add_memo_at("First cue", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        let second = service
+            .add_memo_at("Second cue", ts(2026, 3, 10, 8, 1))
+            .expect("create");
+        let original_first_updated_at = first.updated_at_ms;
+
+        service
+            .reorder_active_memos(&[second.id.clone(), first.id.clone()])
+            .expect("reorder");
+
+        let reloaded_first = service.get_memo(&first.id).expect("first memo");
+        let active = service.list_active_memos().expect("list active");
+        assert_eq!(reloaded_first.updated_at_ms, original_first_updated_at);
+        assert_eq!(
+            active.iter().map(|memo| memo.id.as_str()).collect::<Vec<_>>(),
+            vec![second.id.as_str(), first.id.as_str()]
+        );
+    }
+
+    #[test]
+    fn pinned_memos_stay_above_newer_regular_memos() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let pinned = service
+            .add_memo_at("Pinned cue", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        service
+            .set_memo_pinned_at(&pinned.id, true, ts(2026, 3, 10, 8, 1))
+            .expect("pin");
+        let regular = service
+            .add_memo_at("Regular cue", ts(2026, 3, 10, 8, 2))
+            .expect("create");
+
+        let active = service.list_active_memos().expect("list active");
+
+        assert_eq!(
+            active.iter().map(|memo| memo.id.as_str()).collect::<Vec<_>>(),
+            vec![pinned.id.as_str(), regular.id.as_str()]
+        );
+        assert!(active[0].pinned);
+        assert!(!active[1].pinned);
+    }
+
+    #[test]
+    fn reopened_memo_returns_to_top_of_regular_memos() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let first = service
+            .add_memo_at("First cue", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        let second = service
+            .add_memo_at("Second cue", ts(2026, 3, 10, 8, 1))
+            .expect("create");
+        service
+            .clear_memo_at(&first.id, ts(2026, 3, 10, 8, 2))
+            .expect("clear");
+
+        service
+            .reopen_memo_at(&first.id, ts(2026, 3, 10, 8, 3))
+            .expect("reopen");
+
+        let active = service.list_active_memos().expect("list active");
+        assert_eq!(
+            active.iter().map(|memo| memo.id.as_str()).collect::<Vec<_>>(),
+            vec![first.id.as_str(), second.id.as_str()]
+        );
     }
 }

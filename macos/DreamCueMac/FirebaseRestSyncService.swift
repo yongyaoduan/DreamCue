@@ -37,9 +37,9 @@ final class FirebaseRestSyncService {
         }
     }
 
-    func uploadDeletedMemo(id: String) async {
+    func uploadDeletedMemo(id: String, deletedAtMs: Int64? = nil) async {
         guard let session, !databaseURL.isEmpty else { return }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = deletedAtMs ?? Int64(Date().timeIntervalSince1970 * 1000)
         let fields: [String: Any] = [
             "content": "",
             "status": "cleared",
@@ -48,28 +48,29 @@ final class FirebaseRestSyncService {
             "cleared_at_ms": now,
             "reminder_count": 0,
             "last_reviewed_at_ms": now,
+            "display_order": now,
+            "pinned": false,
             "deleted": true,
         ]
         await patchDocument(id: id, fields: fields, session: session)
     }
 
-    func fetchMemos() async -> [Memo] {
+    func fetchMemoRecords() async -> [RemoteMemoRecord] {
         guard let session, !databaseURL.isEmpty else { return [] }
         guard var components = URLComponents(string: databaseURL.appending("/users/\(session.userId)/memos.json")) else { return [] }
         components.queryItems = [URLQueryItem(name: "auth", value: session.idToken)]
         guard let url = components.url else { return [] }
-        var request = URLRequest(url: url)
+        let request = URLRequest(url: url)
 
         guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              !(root is NSNull)
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             return []
         }
 
         return root.compactMap { memoId, raw in
             guard let fields = raw as? [String: Any] else { return nil }
-            return documentToMemo(id: memoId, fields: fields)
+            return documentToRecord(id: memoId, fields: fields)
         }
     }
 
@@ -111,6 +112,8 @@ final class FirebaseRestSyncService {
             "cleared_at_ms": jsonValue(memo.clearedAtMs),
             "reminder_count": memo.reminderCount,
             "last_reviewed_at_ms": jsonValue(memo.lastReviewedAtMs),
+            "display_order": memo.displayOrder,
+            "pinned": memo.pinned,
             "deleted": false,
         ]
         await patchDocument(id: memo.id, fields: fields, session: session)
@@ -127,19 +130,27 @@ final class FirebaseRestSyncService {
         _ = try? await URLSession.shared.data(for: request)
     }
 
-    private func documentToMemo(id: String, fields: [String: Any]) -> Memo? {
-        guard !boolField(fields["deleted"]),
-              let content = fields["content"] as? String,
+    private func documentToRecord(id: String, fields: [String: Any]) -> RemoteMemoRecord? {
+        let updatedAtMs = intField(fields["updated_at_ms"]) ?? 0
+        if boolField(fields["deleted"]) {
+            return RemoteMemoRecord(
+                id: id,
+                memo: nil,
+                deleted: true,
+                updatedAtMs: updatedAtMs
+            )
+        }
+
+        guard let content = fields["content"] as? String,
               let statusRaw = fields["status"] as? String,
               let status = MemoStatus(rawValue: statusRaw),
               let createdAtMs = intField(fields["created_at_ms"]),
-              let updatedAtMs = intField(fields["updated_at_ms"]),
               let reminderCount = intField(fields["reminder_count"])
         else {
             return nil
         }
 
-        return Memo(
+        let memo = Memo(
             id: id,
             content: content,
             status: status,
@@ -147,7 +158,15 @@ final class FirebaseRestSyncService {
             updatedAtMs: updatedAtMs,
             clearedAtMs: intField(fields["cleared_at_ms"]),
             reminderCount: reminderCount,
-            lastReviewedAtMs: intField(fields["last_reviewed_at_ms"])
+            lastReviewedAtMs: intField(fields["last_reviewed_at_ms"]),
+            displayOrder: intField(fields["display_order"]) ?? updatedAtMs,
+            pinned: boolField(fields["pinned"])
+        )
+        return RemoteMemoRecord(
+            id: id,
+            memo: memo,
+            deleted: false,
+            updatedAtMs: updatedAtMs
         )
     }
 }

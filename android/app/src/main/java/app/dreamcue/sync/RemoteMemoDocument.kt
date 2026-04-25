@@ -12,6 +12,8 @@ data class RemoteMemoDocument(
     val clearedAtMs: Long?,
     val reminderCount: Long,
     val lastReviewedAtMs: Long?,
+    val displayOrder: Long,
+    val pinned: Boolean,
     val deleted: Boolean,
 ) {
     fun toMemo(): Memo {
@@ -24,6 +26,8 @@ data class RemoteMemoDocument(
             clearedAtMs = clearedAtMs,
             reminderCount = reminderCount,
             lastReviewedAtMs = lastReviewedAtMs,
+            displayOrder = displayOrder,
+            pinned = pinned,
         )
     }
 
@@ -36,6 +40,8 @@ data class RemoteMemoDocument(
             "cleared_at_ms" to clearedAtMs,
             "reminder_count" to reminderCount,
             "last_reviewed_at_ms" to lastReviewedAtMs,
+            "display_order" to displayOrder,
+            "pinned" to pinned,
             "deleted" to deleted,
         )
     }
@@ -51,6 +57,8 @@ data class RemoteMemoDocument(
                 clearedAtMs = memo.clearedAtMs,
                 reminderCount = memo.reminderCount,
                 lastReviewedAtMs = memo.lastReviewedAtMs,
+                displayOrder = memo.displayOrder,
+                pinned = memo.pinned,
                 deleted = false,
             )
         }
@@ -65,6 +73,8 @@ data class RemoteMemoDocument(
                 clearedAtMs = deletedAtMs,
                 reminderCount = 0,
                 lastReviewedAtMs = deletedAtMs,
+                displayOrder = deletedAtMs,
+                pinned = false,
                 deleted = true,
             )
         }
@@ -79,6 +89,10 @@ data class RemoteMemoDocument(
                 clearedAtMs = values.nullableLongValue("cleared_at_ms"),
                 reminderCount = values.longValue("reminder_count"),
                 lastReviewedAtMs = values.nullableLongValue("last_reviewed_at_ms"),
+                displayOrder = values.longValue("display_order")
+                    .takeIf { it != 0L }
+                    ?: values.longValue("updated_at_ms"),
+                pinned = values["pinned"] as? Boolean ?: false,
                 deleted = values["deleted"] as? Boolean ?: false,
             )
         }

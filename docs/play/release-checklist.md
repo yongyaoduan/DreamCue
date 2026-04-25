@@ -39,7 +39,6 @@
 ## Permissions
 
 - `POST_NOTIFICATIONS`: sends the daily reminder notification.
-- `SCHEDULE_EXACT_ALARM`: schedules the daily reminder at a fixed time.
 - `RECEIVE_BOOT_COMPLETED`: rebuilds reminders after device restart.
 - `INTERNET`: signs in to Firebase and syncs memo data.
 
@@ -60,7 +59,7 @@ This prevents Android auto backup from copying local memo data outside the App-c
 ## Pre-Review Checks
 
 - The App launches without crashing.
-- First launch requests notification and alarm permissions.
+- First launch requests notification permission.
 - Today, Archive, Rhythm, and Account tabs open correctly.
 - A cleared memo moves to History.
 - Archive search updates only after tapping the search action.

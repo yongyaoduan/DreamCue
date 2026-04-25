@@ -56,6 +56,8 @@ class MainActivity : ComponentActivity() {
                 onCreateSyncAccount = viewModel::createSyncAccount,
                 onSignOutSync = viewModel::signOutSync,
                 onReminderEnabledChange = viewModel::setReminderEnabled,
+                onReorderCurrentMemos = viewModel::reorderCurrentMemos,
+                onSetMemoPinned = viewModel::setMemoPinned,
             )
         }
     }

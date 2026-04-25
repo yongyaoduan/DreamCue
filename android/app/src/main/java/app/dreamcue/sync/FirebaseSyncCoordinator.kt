@@ -179,8 +179,17 @@ class FirebaseSyncCoordinator(
             val values = child.value as? Map<String, Any?> ?: continue
             val remote = RemoteMemoDocument.fromMap(memoId, values)
             if (remote.deleted) {
-                repository.deleteRemoteMemo(memoId)
+                repository.applyRemoteDeletedMemo(memoId, remote.updatedAtMs)
             } else {
+                val decision = decideRemoteMemoApplication(
+                    remote = remote,
+                    localDeletedAtMs = repository.deletedMemoAt(memoId),
+                )
+                if (!decision.applyRemote) {
+                    decision.deletedAtMsToUpload?.let { uploadDeletedMemo(memoId, it) }
+                    continue
+                }
+                repository.clearDeletedMemo(memoId)
                 repository.applyRemoteMemo(remote.toMemo())
             }
         }

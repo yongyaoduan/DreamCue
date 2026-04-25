@@ -33,7 +33,7 @@ Good use cases:
 - A small task that needs daily review
 - A thought that should stay visible until it is handled
 
-DreamCue uses `POST_NOTIFICATIONS` for reminders, `SCHEDULE_EXACT_ALARM` for fixed-time scheduling, and `INTERNET` for optional sync. Privacy policy text is maintained in `docs/play/privacy-policy.md`.
+DreamCue uses `POST_NOTIFICATIONS` for reminders and `INTERNET` for optional sync. Privacy policy text is maintained in `docs/play/privacy-policy.md`.
 
 ## Keywords
 

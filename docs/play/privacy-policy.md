@@ -36,7 +36,6 @@ users/{uid}/memos/{memoId}
 DreamCue may request these Android permissions:
 
 - `POST_NOTIFICATIONS`: sends daily reminder notifications.
-- `SCHEDULE_EXACT_ALARM`: schedules daily reminders at a fixed time.
 - `RECEIVE_BOOT_COMPLETED`: restores reminders after device restart.
 - `INTERNET`: signs in to Firebase and syncs memo data.
 

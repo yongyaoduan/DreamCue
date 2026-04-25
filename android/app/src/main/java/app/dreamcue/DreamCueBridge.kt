@@ -39,10 +39,16 @@ class DreamCueBridge private constructor() {
         external fun nativeDeleteMemo(handle: Long, memoId: String): String
 
         @JvmStatic
+        external fun nativeSetMemoPinned(handle: Long, memoId: String, pinned: Int): String
+
+        @JvmStatic
         external fun nativeApplyRemoteMemo(handle: Long, memoJson: String): String
 
         @JvmStatic
-        external fun nativeDeleteRemoteMemo(handle: Long, memoId: String): String
+        external fun nativeDeleteRemoteMemo(handle: Long, memoId: String, deletedAtMs: Long): String
+
+        @JvmStatic
+        external fun nativeReorderActiveMemos(handle: Long, orderedIdsJson: String): String
 
         @JvmStatic
         external fun nativeListActiveMemos(handle: Long): String

@@ -39,7 +39,7 @@ The workflow has three jobs:
 
 ## Signing Status
 
-The local `v1.2.2` macOS package was built with Xcode's `Sign to Run Locally` identity. That is suitable for local validation, but it is not a notarized Developer ID distribution.
+The local `v1.2.3` macOS package was built with Xcode's `Sign to Run Locally` identity. That is suitable for local validation, but it is not a notarized Developer ID distribution.
 
 The GitHub Actions workflow is designed for production signing:
 
@@ -97,7 +97,7 @@ Keep keystores, `.p12` files, Firebase local properties, and admin SDK keys out 
 Build the macOS release zip locally:
 
 ```bash
-DREAMCUE_RELEASE_VERSION=v1.2.2 ./scripts/build-macos-release.sh
+DREAMCUE_RELEASE_VERSION=v1.2.3 ./scripts/build-macos-release.sh
 ```
 
 Build the Android release APK locally:

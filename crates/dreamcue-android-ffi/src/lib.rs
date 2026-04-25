@@ -148,6 +148,23 @@ pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeDeleteMemo(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeSetMemoPinned(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    memo_id: JString,
+    pinned: jint,
+) -> jstring {
+    let response = with_service_json(handle, || {
+        let memo_id = get_string(&mut env, memo_id)?;
+        with_service(handle, |service| {
+            service.set_memo_pinned(&memo_id, pinned != 0)
+        })
+    });
+    to_jstring(&mut env, response)
+}
+
+#[no_mangle]
 pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeApplyRemoteMemo(
     mut env: JNIEnv,
     _class: JClass,
@@ -168,10 +185,29 @@ pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeDeleteRemoteMemo(
     _class: JClass,
     handle: jlong,
     memo_id: JString,
+    deleted_at_ms: jlong,
 ) -> jstring {
     let response = with_service_json(handle, || {
         let memo_id = get_string(&mut env, memo_id)?;
-        with_service(handle, |service| service.delete_remote_memo(&memo_id))
+        with_service(handle, |service| {
+            service.delete_remote_memo_at(&memo_id, deleted_at_ms)
+        })
+    });
+    to_jstring(&mut env, response)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_app_dreamcue_DreamCueBridge_nativeReorderActiveMemos(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    ordered_ids_json: JString,
+) -> jstring {
+    let response = with_service_json(handle, || {
+        let ordered_ids_json = get_string(&mut env, ordered_ids_json)?;
+        let ordered_ids: Vec<String> =
+            serde_json::from_str(&ordered_ids_json).context("failed to parse active memo order")?;
+        with_service(handle, |service| service.reorder_active_memos(&ordered_ids))
     });
     to_jstring(&mut env, response)
 }

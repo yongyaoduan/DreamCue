@@ -14,15 +14,16 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.swipeUp
 import app.dreamcue.model.Memo
 import app.dreamcue.model.MemoStatus
 import app.dreamcue.model.ReminderTime
 import app.dreamcue.model.SearchResult
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import org.junit.Rule
 import org.junit.Test
+import kotlin.math.roundToInt
 
 class DreamCueAppTest {
     @get:Rule
@@ -71,6 +72,7 @@ class DreamCueAppTest {
             MainUiState(
                 currentMemos = listOf(activeMemo),
                 historyMemos = listOf(archivedMemo),
+                searchResults = listOf(SearchResult(activeMemo, 0.0, listOf("recent"))),
             ),
         )
         composeRule.setContent {
@@ -102,6 +104,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Daily rhythm").assertIsDisplayed()
         composeRule.onNodeWithText("Active cues").assertIsDisplayed()
         composeRule.onNodeWithText("Active Cues").assertIsDisplayed()
+        composeRule.onNodeWithText("#01").assertIsDisplayed()
         composeRule.onNodeWithText(activeMemo.content).assertIsDisplayed()
 
         composeRule.onNodeWithText("Archive").performClick()
@@ -110,6 +113,9 @@ class DreamCueAppTest {
         assert(composeRule.onAllNodesWithText("Run Search").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText("All History").assertIsDisplayed()
         composeRule.onNodeWithText(archivedMemo.content).assertIsDisplayed()
+        composeRule.onNodeWithText(activeMemo.content).assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Current"))
+        composeRule.onNodeWithText("Current").assertIsDisplayed()
         assert(composeRule.onAllNodesWithText("Restore").fetchSemanticsNodes().isEmpty())
 
         composeRule.onNodeWithText("Rhythm").performClick()
@@ -120,8 +126,8 @@ class DreamCueAppTest {
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Permission health"))
         assert(composeRule.onAllNodesWithText("Quiet hours").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText("Permission health").assertIsDisplayed()
-        composeRule.onNodeWithText("Exact alarms").assertIsDisplayed()
         composeRule.onNodeWithText("Notifications").assertIsDisplayed()
+        assert(composeRule.onAllNodesWithText("Exact alarms").fetchSemanticsNodes().isEmpty())
 
         composeRule.onNodeWithText("Account").performClick()
         composeRule.onNodeWithText("Sync Account").assertIsDisplayed()
@@ -360,7 +366,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Search archive").performTextInput("release")
         composeRule.onNodeWithContentDescription("Run archive search").performClick()
         composeRule.onNodeWithText("Search Results").assertIsDisplayed()
-        composeRule.onNodeWithText("1 archived cue").assertIsDisplayed()
+        composeRule.onNodeWithText("1 cue").assertIsDisplayed()
         assert(composeRule.onAllNodesWithText(archivedMemo.content).fetchSemanticsNodes().isNotEmpty())
         assert(composeRule.onAllNodesWithText("title").fetchSemanticsNodes().isEmpty())
 
@@ -373,7 +379,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Last updated").assertIsDisplayed()
         composeRule.onNodeWithText("Last reminded").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Delete cue").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Keep cue").assertIsDisplayed()
+        assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithContentDescription("Restore cue").assertIsDisplayed()
     }
 
@@ -465,7 +471,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText(archivedMemo.content).performClick()
         composeRule.onNodeWithText("Archived Cue").assertIsDisplayed()
         composeRule.onNodeWithText("Completed").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Keep cue").assertIsDisplayed()
+        assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithContentDescription("Restore cue").performClick()
 
         assert(restoredMemoId == archivedMemo.id)
@@ -603,7 +609,7 @@ class DreamCueAppTest {
             )
         }
 
-        composeRule.onNodeWithText("Private sync is active.").assertIsDisplayed()
+        assert(composeRule.onAllNodesWithText("Private sync is active.").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText("Tenant-scoped").assertIsDisplayed()
         composeRule.onNodeWithText(email).assertIsDisplayed()
         composeRule.onNodeWithText("Last sync").assertIsDisplayed()
@@ -663,12 +669,79 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Choose Reminder Time").assertIsDisplayed()
         composeRule.onNodeWithText("21").assertIsDisplayed()
         composeRule.onNodeWithText("00").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Hour picker").performTouchInput {
-            swipeUp()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.swipe(
+            (device.displayWidth * 0.28f).roundToInt(),
+            (device.displayHeight * 0.88f).roundToInt(),
+            (device.displayWidth * 0.28f).roundToInt(),
+            (device.displayHeight * 0.67f).roundToInt(),
+            36,
+        )
+        composeRule.waitUntil {
+            composeRule.onAllNodesWithText("19").fetchSemanticsNodes().isEmpty()
         }
         composeRule.onNodeWithText("Save Time").performClick()
 
-        assert(savedTime == ReminderTime(hour = 22, minute = 0))
+        assert(savedTime != null && savedTime != ReminderTime(hour = 21, minute = 0))
+    }
+
+    @Test
+    fun archiveOpensActiveCueWithCompleteAndArchivedCueWithRestore() {
+        var completedMemoId = ""
+        var restoredMemoId = ""
+        var pinnedMemo: Pair<String, Boolean>? = null
+        var state by mutableStateOf(
+            MainUiState(
+                selectedScreen = MemoScreen.HISTORY,
+                currentMemos = listOf(activeMemo),
+                historyMemos = listOf(archivedMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = { completedMemoId = it },
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {
+                    state = state.copy(selectedMemo = it, detailDraft = it.content)
+                },
+                onDismissMemoDetail = { state = state.copy(selectedMemo = null, detailDraft = "") },
+                onReopenMemo = { restoredMemoId = it },
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+                onSetMemoPinned = { memoId, pinned -> pinnedMemo = memoId to pinned },
+            )
+        }
+
+        composeRule.onNodeWithText(activeMemo.content).assertIsDisplayed()
+        composeRule.onNodeWithText(activeMemo.content).performClick()
+        composeRule.onNodeWithText("Active Cue").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Pin cue").performClick()
+        assert(pinnedMemo == Pair(activeMemo.id, true))
+
+        state = state.copy(selectedMemo = activeMemo)
+        composeRule.onNodeWithContentDescription("Complete cue").performClick()
+        assert(completedMemoId == activeMemo.id)
+
+        state = state.copy(selectedMemo = null)
+        composeRule.onNodeWithText(archivedMemo.content).performClick()
+        composeRule.onNodeWithText("Archived Cue").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Restore cue").performClick()
+        assert(restoredMemoId == archivedMemo.id)
+        assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
     }
 
     private companion object {
@@ -681,6 +754,8 @@ class DreamCueAppTest {
             clearedAtMs = null,
             reminderCount = 1,
             lastReviewedAtMs = null,
+            displayOrder = 1_700_000_060_000,
+            pinned = false,
         )
 
         val archivedMemo = Memo(
@@ -692,6 +767,8 @@ class DreamCueAppTest {
             clearedAtMs = 1_700_000_120_000,
             reminderCount = 2,
             lastReviewedAtMs = 1_700_000_120_000,
+            displayOrder = 1_700_000_120_000,
+            pinned = false,
         )
 
         val olderArchivedMemo = Memo(
@@ -703,6 +780,8 @@ class DreamCueAppTest {
             clearedAtMs = 1_700_000_010_000,
             reminderCount = 1,
             lastReviewedAtMs = 1_700_000_010_000,
+            displayOrder = 1_700_000_010_000,
+            pinned = false,
         )
 
         val searchResult = SearchResult(

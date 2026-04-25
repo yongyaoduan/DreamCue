@@ -17,7 +17,7 @@ DreamCue is a memo reminder App with local-first storage and optional Firebase s
 
 - `crates/dreamcue-core`: Rust core for SQLite storage, event logs, daily review queues, and search.
 - `crates/dreamcue-android-ffi`: Rust JNI bridge that returns JSON to Android.
-- `android/`: Android App with Compose UI, notification permission handling, alarm scheduling, and boot rescheduling.
+- `android/`: Android App with Compose UI, notification permission handling, reminder scheduling, and boot rescheduling.
 - `macos/`: macOS SwiftUI App with local JSON storage, Firebase Auth REST login, and Realtime Database REST sync polling.
 - `docs/architecture.md`: Architecture notes.
 - `scripts/build-rust-android.sh`: Android native library build script.

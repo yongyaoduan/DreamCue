@@ -192,14 +192,16 @@ jobs:
           fail_on_unmatched_files: true
           body: |
             ## Highlights
-            - Android APK release with the current DreamCue reminder, archive, rhythm, account, and Firebase sync flows.
-            - Native macOS SwiftUI build with matching DreamCue visual language, shared icon assets, and account-scoped sync.
-            - Firebase data remains tenant-scoped under the signed-in user ID.
+            - Adds tenant-scoped Firebase sync for cue order, pinned state, restore, completion, and deletion tombstones.
+            - Adds pinned cues above regular cues, persistent drag ordering, and archive restore-to-today behavior.
+            - Refines Android interactions with a real wheel-style reminder time picker, archive-wide search, notification-only reminders, and pinned notification summaries.
+            - Refines macOS interactions with full-row navigation hit targets, Return-to-save editing, compact Account/Rhythm layouts, and Google Material SVG action icons.
             - GitHub release assets intentionally include the Android APK and macOS zip only. Play Store AAB delivery is handled separately.
 
             ## Verification
             - Rust workspace tests pass.
-            - Android unit tests, Android UI test compilation, and release APK build pass.
+            - Android unit tests and connected UI tests pass on an emulator.
             - macOS XCUITest passes, with the Firebase sync test disabled by default for deterministic CI.
+            - Documentation is checked for user-facing tone, and repository UI/docs text is English-only.
             - macOS release package is signed with Developer ID and notarized when Apple signing secrets are configured.
           files: release-assets/*

@@ -1,13 +1,9 @@
 package app.dreamcue.worker
 
 import android.app.AlarmManager
-import android.app.AlarmManager.AlarmClockInfo
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import androidx.core.app.AlarmManagerCompat
-import app.dreamcue.MainActivity
 import app.dreamcue.DreamCueRepository
 import app.dreamcue.model.ReminderTime
 import java.util.Calendar
@@ -22,39 +18,17 @@ object ReminderScheduler {
         val pendingIntent = reviewPendingIntent(appContext)
         val triggerAtMillis = nextTriggerAtMillis(time)
 
-        if (canScheduleExactAlarms(appContext)) {
-            val showIntent = PendingIntent.getActivity(
-                appContext,
-                REQUEST_CODE_DAILY_REVIEW + 100,
-                Intent(appContext, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-
-            alarmManager.setAlarmClock(
-                AlarmClockInfo(triggerAtMillis, showIntent),
-                pendingIntent,
-            )
-        } else {
-            AlarmManagerCompat.setAndAllowWhileIdle(
-                alarmManager,
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent,
-            )
-        }
+        alarmManager.set(
+            AlarmManager.RTC_WAKEUP,
+            triggerAtMillis,
+            pendingIntent,
+        )
     }
 
     fun cancel(context: Context) {
         val appContext = context.applicationContext
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.cancel(reviewPendingIntent(appContext))
-    }
-
-    fun canScheduleExactAlarms(context: Context): Boolean {
-        val alarmManager = context.applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
     }
 
     private fun reviewPendingIntent(context: Context): PendingIntent {

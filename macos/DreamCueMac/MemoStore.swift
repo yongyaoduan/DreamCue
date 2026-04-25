@@ -12,15 +12,14 @@ final class MemoStore: ObservableObject {
     @Published var syncStatus = "Sign in to sync across devices."
     @Published private(set) var signedInEmail = ""
     @Published var dailyReminderEnabled = true
-    @Published var quietHoursEnabled = true
     @Published var reminderHour = 21
     @Published var reminderMinute = 0
-    @Published var quietStartHour = 22
-    @Published var quietEndHour = 7
 
     private let storageURL: URL
+    private let deletedMemoTombstonesURL: URL
     private let syncService = FirebaseRestSyncService()
     private var pollTask: Task<Void, Never>?
+    private var deletedMemoTombstones: [String: Int64] = [:]
 
     init() {
         let appURL: URL
@@ -35,6 +34,7 @@ final class MemoStore: ObservableObject {
         }
         try? FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
         storageURL = appURL.appendingPathComponent("memos.json")
+        deletedMemoTombstonesURL = appURL.appendingPathComponent("deleted-memos.json")
         load()
         if let previewEmail = ProcessInfo.processInfo.environment["DREAMCUE_PREVIEW_SYNC_EMAIL"], !previewEmail.isEmpty {
             signedInEmail = previewEmail
@@ -44,7 +44,7 @@ final class MemoStore: ObservableObject {
     }
 
     var currentMemos: [Memo] {
-        memos.filter(\.isActive).sorted { $0.updatedAtMs > $1.updatedAtMs }
+        memos.filter(\.isActive).sorted(by: activeMemoSort)
     }
 
     var historyMemos: [Memo] {
@@ -70,10 +70,6 @@ final class MemoStore: ObservableObject {
         String(format: "%02d:%02d", reminderHour, reminderMinute)
     }
 
-    var quietHoursText: String {
-        String(format: "%02d:00 – %02d:00", quietStartHour, quietEndHour)
-    }
-
     var isSyncActive: Bool {
         !signedInEmail.isEmpty
     }
@@ -94,7 +90,9 @@ final class MemoStore: ObservableObject {
             updatedAtMs: now,
             clearedAtMs: nil,
             reminderCount: 0,
-            lastReviewedAtMs: nil
+            lastReviewedAtMs: nil,
+            displayOrder: now,
+            pinned: false
         )
         memos.append(memo)
         draft = ""
@@ -124,17 +122,45 @@ final class MemoStore: ObservableObject {
     func reopenMemo(_ memo: Memo) {
         guard let index = memos.firstIndex(where: { $0.id == memo.id }) else { return }
         memos[index].status = .active
-        memos[index].updatedAtMs = currentTimeMs()
+        let now = currentTimeMs()
+        memos[index].updatedAtMs = now
         memos[index].clearedAtMs = nil
         memos[index].lastReviewedAtMs = nil
+        memos[index].displayOrder = now
         persistAndUpload()
     }
 
+    func setMemoPinned(_ memo: Memo, pinned: Bool) {
+        guard let index = memos.firstIndex(where: { $0.id == memo.id }) else { return }
+        let now = currentTimeMs()
+        memos[index].pinned = pinned
+        memos[index].displayOrder = now
+        memos[index].updatedAtMs = now
+        persistAndUpload()
+    }
+
+    func moveCurrentMemo(from sourceIndex: Int, to destinationIndex: Int) {
+        var current = currentMemos
+        guard current.indices.contains(sourceIndex),
+              current.indices.contains(destinationIndex),
+              sourceIndex != destinationIndex
+        else {
+            return
+        }
+
+        let moved = current.remove(at: sourceIndex)
+        current.insert(moved, at: destinationIndex)
+        applyActiveOrder(current.map(\.id))
+    }
+
     func deleteMemo(_ memo: Memo) {
+        let deletedAtMs = currentTimeMs()
         memos.removeAll { $0.id == memo.id }
+        deletedMemoTombstones[memo.id] = deletedAtMs
         persist()
+        persistDeletedMemoTombstones()
         Task {
-            await syncService.uploadDeletedMemo(id: memo.id)
+            await syncService.uploadDeletedMemo(id: memo.id, deletedAtMs: deletedAtMs)
         }
     }
 
@@ -195,13 +221,24 @@ final class MemoStore: ObservableObject {
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: storageURL) else { return }
-        memos = (try? JSONDecoder().decode([Memo].self, from: data)) ?? []
+        if let data = try? Data(contentsOf: storageURL) {
+            memos = (try? JSONDecoder().decode([Memo].self, from: data)) ?? []
+        }
+        if let deletedData = try? Data(contentsOf: deletedMemoTombstonesURL),
+           let decodedTombstones = try? JSONDecoder().decode([String: Int64].self, from: deletedData) {
+            deletedMemoTombstones = decodedTombstones
+        }
     }
 
     private func persist() {
         if let data = try? JSONEncoder().encode(memos) {
             try? data.write(to: storageURL, options: .atomic)
+        }
+    }
+
+    private func persistDeletedMemoTombstones() {
+        if let data = try? JSONEncoder().encode(deletedMemoTombstones) {
+            try? data.write(to: deletedMemoTombstonesURL, options: .atomic)
         }
     }
 
@@ -213,22 +250,33 @@ final class MemoStore: ObservableObject {
     }
 
     private func pullAndUpload() async {
-        let remoteMemos = await syncService.fetchMemos()
-        merge(remoteMemos)
+        let remoteRecords = await syncService.fetchMemoRecords()
+        let outcome = mergeRemoteRecordsWithTombstones(
+            remoteRecords,
+            into: memos,
+            deletedMemoTombstones: deletedMemoTombstones
+        )
+        memos = outcome.memos
+        deletedMemoTombstones = outcome.deletedMemoTombstones
         persist()
+        persistDeletedMemoTombstones()
+        for deletedMemo in outcome.deletedMemosToUpload {
+            await syncService.uploadDeletedMemo(
+                id: deletedMemo.id,
+                deletedAtMs: deletedMemo.deletedAtMs
+            )
+        }
         await syncService.uploadMemos(memos)
     }
 
-    private func merge(_ remoteMemos: [Memo]) {
-        for remote in remoteMemos {
-            if let index = memos.firstIndex(where: { $0.id == remote.id }) {
-                if remote.updatedAtMs >= memos[index].updatedAtMs {
-                    memos[index] = remote
-                }
-            } else {
-                memos.append(remote)
+    private func applyActiveOrder(_ orderedIds: [String]) {
+        let now = currentTimeMs()
+        for (offset, memoId) in orderedIds.enumerated() {
+            if let index = memos.firstIndex(where: { $0.id == memoId && $0.isActive }) {
+                memos[index].displayOrder = now - Int64(offset)
             }
         }
+        persistAndUpload()
     }
 
     private func startPolling() {
@@ -244,4 +292,14 @@ final class MemoStore: ObservableObject {
     private func currentTimeMs() -> Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
     }
+}
+
+private func activeMemoSort(_ lhs: Memo, _ rhs: Memo) -> Bool {
+    if lhs.pinned != rhs.pinned {
+        return lhs.pinned && !rhs.pinned
+    }
+    if lhs.displayOrder != rhs.displayOrder {
+        return lhs.displayOrder > rhs.displayOrder
+    }
+    return lhs.updatedAtMs > rhs.updatedAtMs
 }

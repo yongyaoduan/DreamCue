@@ -94,6 +94,12 @@ Build the macOS App and XCUITest bundle:
 xcodebuild -project macos/DreamCueMac.xcodeproj -scheme DreamCueMac -configuration Debug -destination 'platform=macOS' build-for-testing
 ```
 
+## Release
+
+GitHub Releases publish the Android APK and macOS zip. The Android App Bundle is kept out of GitHub Releases and belongs to the Play Store delivery process.
+
+See [Release Engineering](docs/release.md) for GitHub Actions. It also covers signing, notarization, secrets, and verification.
+
 ## Current State
 
 - The Rust core covers memo lifecycle, event logs, daily review queues, and search.

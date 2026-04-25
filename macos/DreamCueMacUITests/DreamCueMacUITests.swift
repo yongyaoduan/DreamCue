@@ -90,8 +90,26 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Wed"].exists)
         XCTAssertFalse(app.staticTexts["Apr 23"].exists)
         XCTAssertFalse(app.buttons["Save Time"].exists)
-        XCTAssertTrue(app.buttons["Done"].exists)
+        XCTAssertTrue(app.textFields["timePicker.hourField"].exists)
+        XCTAssertTrue(app.textFields["timePicker.minuteField"].exists)
+        XCTAssertTrue(app.buttons["timePicker.hourIncrement"].exists)
+        XCTAssertTrue(app.buttons["timePicker.hourDecrement"].exists)
+        XCTAssertTrue(app.buttons["timePicker.minuteIncrement"].exists)
+        XCTAssertTrue(app.buttons["timePicker.minuteDecrement"].exists)
+        XCTAssertTrue(app.buttons["timePicker.doneButton"].exists)
+        app.buttons["timePicker.minuteIncrement"].click()
+        waitForTimePickerValue("21:05", app: app)
+        for _ in 0..<12 {
+            app.buttons["timePicker.hourDecrement"].click()
+        }
+        for _ in 0..<5 {
+            app.buttons["timePicker.minuteIncrement"].click()
+        }
+        waitForTimePickerValue("09:30", app: app)
         attachScreenshot("mac-time-picker-redesign", app: app)
+        app.buttons["timePicker.doneButton"].click()
+        XCTAssertTrue(app.staticTexts["09:30"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["You'll be reminded daily at 09:30."].exists)
     }
 
     @objc
@@ -112,6 +130,38 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(app.buttons[newerCue].waitForExistence(timeout: 5))
         XCTAssertLessThan(app.buttons[pinnedCue].frame.minY, app.buttons[newerCue].frame.minY)
         attachScreenshot("mac-pinned-order-redesign", app: app)
+    }
+
+    @objc
+    func testDraggingCueReordersNumbersAndPersistsOrder() {
+        let app = launchIsolatedApp()
+        let firstCue = "first_drag_\(UUID().uuidString.prefix(6))"
+        let secondCue = "second_drag_\(UUID().uuidString.prefix(6))"
+        let thirdCue = "third_drag_\(UUID().uuidString.prefix(6))"
+
+        XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
+        createCue(firstCue, app: app)
+        createCue(secondCue, app: app)
+        createCue(thirdCue, app: app)
+
+        XCTAssertEqual(app.buttons[thirdCue].value as? String, "#01")
+        XCTAssertEqual(app.buttons[secondCue].value as? String, "#02")
+        XCTAssertEqual(app.buttons[firstCue].value as? String, "#03")
+        app.buttons[thirdCue].press(forDuration: 0.7, thenDragTo: app.buttons[firstCue])
+
+        XCTAssertTrue(app.buttons[secondCue].waitForExistence(timeout: 5))
+        XCTAssertLessThan(app.buttons[secondCue].frame.minY, app.buttons[thirdCue].frame.minY)
+        XCTAssertEqual(app.buttons[secondCue].value as? String, "#01")
+        XCTAssertEqual(app.buttons[firstCue].value as? String, "#02")
+        XCTAssertEqual(app.buttons[thirdCue].value as? String, "#03")
+        attachScreenshot("mac-drag-order-redesign", app: app)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons[secondCue].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons[secondCue].value as? String, "#01")
+        XCTAssertEqual(app.buttons[firstCue].value as? String, "#02")
+        XCTAssertEqual(app.buttons[thirdCue].value as? String, "#03")
     }
 
     @objc
@@ -215,7 +265,7 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     private func createCue(_ text: String, app: XCUIApplication) {
-        closeSystemPreferences()
+        closeSystemOverlays()
         app.activate()
         app.buttons["New Cue"].click()
         XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
@@ -237,11 +287,12 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(save.exists)
         XCTAssertTrue(cancel.exists)
         XCTAssertGreaterThanOrEqual(editor.frame.width, 510)
-        XCTAssertGreaterThan(save.frame.minY, editor.frame.maxY)
-        XCTAssertGreaterThan(cancel.frame.minY, editor.frame.maxY)
+        XCTAssertLessThan(editor.frame.height, 290)
+        XCTAssertLessThan(save.frame.maxY, editor.frame.minY)
+        XCTAssertLessThan(cancel.frame.maxY, editor.frame.minY)
         XCTAssertLessThanOrEqual(abs(save.frame.maxX - editor.frame.maxX), 2)
         XCTAssertGreaterThanOrEqual(editor.frame.minX, 0)
-        XCTAssertGreaterThanOrEqual(cancel.frame.minX, editor.frame.minX)
+        XCTAssertGreaterThan(cancel.frame.minX, editor.frame.minX)
     }
 
     private func assertSidebarButtonFillsRow(_ element: XCUIElement) {
@@ -254,7 +305,7 @@ final class DreamCueMacUITests: XCTestCase {
         function: String = #function,
         extraEnvironment: [String: String] = [:]
     ) -> XCUIApplication {
-        closeSystemPreferences()
+        closeSystemOverlays()
         let app = XCUIApplication()
         let safeName = function.replacingOccurrences(of: "()", with: "")
         let storageURL = FileManager.default.temporaryDirectory
@@ -271,8 +322,12 @@ final class DreamCueMacUITests: XCTestCase {
         return app
     }
 
-    private func closeSystemPreferences() {
-        let bundleIdentifiers = ["com.apple.systempreferences"]
+    private func closeSystemOverlays() {
+        let bundleIdentifiers = [
+            "com.apple.systempreferences",
+            "com.apple.notificationcenterui",
+            "com.apple.tips",
+        ]
         for bundleIdentifier in bundleIdentifiers {
             let app = XCUIApplication(bundleIdentifier: bundleIdentifier)
             if app.exists {
@@ -300,6 +355,19 @@ final class DreamCueMacUITests: XCTestCase {
         NSPasteboard.general.setString(text, forType: .string)
         app.menuBars.menuBarItems["Edit"].click()
         app.menuItems["Paste"].click()
+    }
+
+    private func waitForTimePickerValue(_ value: String, app: XCUIApplication) {
+        let element = app.staticTexts["timePicker.value"]
+        XCTAssertTrue(element.waitForExistence(timeout: 3))
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            if element.value as? String == value {
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTFail("Expected time picker value \(value), got \(String(describing: element.value))")
     }
 
     private func attachScreenshot(_ name: String, app: XCUIApplication) {

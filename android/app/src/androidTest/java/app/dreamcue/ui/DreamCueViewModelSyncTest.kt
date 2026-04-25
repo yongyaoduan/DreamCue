@@ -41,6 +41,38 @@ class DreamCueViewModelSyncTest {
         repository.dispose()
     }
 
+    @Test
+    fun reorderingCurrentMemosUploadsDisplayOrderForSync() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.filesDir, "dreamcue.sqlite3").delete()
+        val repository = DreamCueRepository(context)
+        val syncCoordinator = RecordingSyncCoordinator()
+        val viewModel = DreamCueViewModel(repository, syncCoordinator)
+
+        waitUntil { !viewModel.uiState.isLoading && viewModel.uiState.nativeReady }
+        viewModel.updateDraft("first ordered cue")
+        viewModel.addMemo()
+        viewModel.updateDraft("second ordered cue")
+        viewModel.addMemo()
+        viewModel.updateDraft("third ordered cue")
+        viewModel.addMemo()
+        waitUntil { viewModel.uiState.currentMemos.size >= 3 }
+
+        val movedMemoId = viewModel.uiState.currentMemos.first().id
+        syncCoordinator.uploadedMemos.clear()
+        viewModel.reorderCurrentMemos(0, 2)
+
+        waitUntil {
+            syncCoordinator.uploadedMemos.size >= 3 &&
+                syncCoordinator.uploadedMemos.last().id == movedMemoId
+        }
+        val uploaded = syncCoordinator.uploadedMemos.takeLast(3)
+        assertTrue(uploaded[0].displayOrder > uploaded[1].displayOrder)
+        assertTrue(uploaded[1].displayOrder > uploaded[2].displayOrder)
+        assertTrue(uploaded[2].id == movedMemoId)
+        repository.dispose()
+    }
+
     private fun waitUntil(timeoutMs: Long = 5_000L, condition: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {

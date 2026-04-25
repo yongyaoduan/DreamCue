@@ -92,6 +92,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1054,6 +1055,7 @@ private fun CueCard(
     statusLabel: String,
     accent: Color,
     onOpen: () -> Unit,
+    numberTag: String? = null,
 ) {
     ElevatedPanel(
         modifier = Modifier.clickable(onClick = onOpen),
@@ -1065,7 +1067,12 @@ private fun CueCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            NumberMarker(displayNumber, memo.pinned, accent)
+            NumberMarker(
+                number = displayNumber,
+                pinned = memo.pinned,
+                color = accent,
+                textModifier = numberTag?.let { Modifier.testTag(it) } ?: Modifier,
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1128,6 +1135,7 @@ private fun ReorderableCueCard(
 
     Box(
         modifier = Modifier
+            .testTag("currentCue.${memo.id}")
             .graphicsLayer { translationY = dragOffset }
             .pointerInput(index, count) {
                 detectDragGesturesAfterLongPress(
@@ -1155,6 +1163,7 @@ private fun ReorderableCueCard(
             statusLabel = statusLabel,
             accent = accent,
             onOpen = onOpen,
+            numberTag = "currentCueNumber.${memo.id}",
         )
     }
 }
@@ -2050,7 +2059,12 @@ private fun MetadataChip(icon: ImageVector, text: String) {
 }
 
 @Composable
-private fun NumberMarker(number: Int, pinned: Boolean, color: Color) {
+private fun NumberMarker(
+    number: Int,
+    pinned: Boolean,
+    color: Color,
+    textModifier: Modifier = Modifier,
+) {
     Surface(
         modifier = Modifier
             .padding(top = 1.dp)
@@ -2066,6 +2080,7 @@ private fun NumberMarker(number: Int, pinned: Boolean, color: Color) {
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
+                modifier = textModifier,
             )
         }
     }

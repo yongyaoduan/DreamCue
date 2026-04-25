@@ -84,6 +84,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 980, minHeight: 650)
+        .background(AppFocusRestorer())
     }
 
     private var sidebar: some View {
@@ -171,6 +172,27 @@ struct ContentView: View {
             store.updateMemo(memo, content: detailDraft)
         }
         selectedMemo = nil
+    }
+}
+
+private struct AppFocusRestorer: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            restoreFocus(for: view)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            restoreFocus(for: view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private func restoreFocus(for view: NSView) {
+        view.window?.makeKeyAndOrderFront(nil)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -583,13 +605,9 @@ private struct NewCueSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("New Cue")
-                .font(.headline)
-            CommittingTextEditor(text: $draft, accessibilityLabel: "Cue Text", onCommit: onSave)
-                .frame(maxWidth: .infinity, minHeight: 220)
-                .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
             HStack(spacing: 10) {
+                Text("New Cue")
+                    .font(.headline)
                 Spacer()
                 Button("Cancel", action: onCancel)
                     .buttonStyle(SecondaryButtonStyle())
@@ -597,6 +615,11 @@ private struct NewCueSheet: View {
                     .buttonStyle(PrimaryButtonStyle())
                     .keyboardShortcut(.return, modifiers: [])
             }
+            CommittingTextEditor(text: $draft, accessibilityLabel: "Cue Text", onCommit: onSave)
+                .frame(maxWidth: .infinity)
+                .frame(height: 245)
+                .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
         }
         .padding(22)
         .frame(width: 560, alignment: .leading)
@@ -666,7 +689,8 @@ private struct CueDetailSheet: View {
 private struct ReminderTimePickerSheet: View {
     @Binding var hour: Int
     @Binding var minute: Int
-    @State private var selectedDate: Date
+    @State private var hourText: String
+    @State private var minuteText: String
     let onCancel: () -> Void
     let onTimeChanged: (Int, Int) -> Void
 
@@ -678,54 +702,239 @@ private struct ReminderTimePickerSheet: View {
     ) {
         _hour = hour
         _minute = minute
-        let date = Calendar.current.date(
-            bySettingHour: hour.wrappedValue,
-            minute: minute.wrappedValue,
-            second: 0,
-            of: Date()
-        ) ?? Date()
-        _selectedDate = State(initialValue: date)
+        _hourText = State(initialValue: String(format: "%02d", hour.wrappedValue))
+        _minuteText = State(initialValue: String(format: "%02d", minute.wrappedValue))
         self.onCancel = onCancel
         self.onTimeChanged = onTimeChanged
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 18) {
             Text("Select reminder time")
                 .font(.headline)
-            DatePicker(
-                "Reminder time",
-                selection: $selectedDate,
-                displayedComponents: .hourAndMinute
-            )
-            .labelsHidden()
-            .datePickerStyle(.automatic)
-            .controlSize(.large)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity)
-            .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(DreamCueStyle.border, lineWidth: 1))
-            .onChange(of: selectedDate) { _, newDate in
-                applyTime(from: newDate)
+
+            Text(String(format: "%02d:%02d", hour, minute))
+                .font(.title2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(DreamCueStyle.deepGreen)
+                .accessibilityLabel("timePicker.value")
+                .accessibilityValue(String(format: "%02d:%02d", hour, minute))
+                .accessibilityIdentifier("timePicker.value")
+
+            HStack(alignment: .center, spacing: 12) {
+                TimeNumberControl(
+                    title: "Hour",
+                    text: $hourText,
+                    decrementIdentifier: "timePicker.hourDecrement",
+                    fieldIdentifier: "timePicker.hourField",
+                    incrementIdentifier: "timePicker.hourIncrement",
+                    onCommit: applyHourText,
+                    onTextChange: applyHourDraft,
+                    onDecrement: { setHour(hour - 1) },
+                    onIncrement: { setHour(hour + 1) }
+                )
+                Text(":")
+                    .font(.title.weight(.semibold))
+                    .foregroundStyle(DreamCueStyle.deepGreen)
+                    .padding(.top, 18)
+                TimeNumberControl(
+                    title: "Minute",
+                    text: $minuteText,
+                    decrementIdentifier: "timePicker.minuteDecrement",
+                    fieldIdentifier: "timePicker.minuteField",
+                    incrementIdentifier: "timePicker.minuteIncrement",
+                    onCommit: applyMinuteText,
+                    onTextChange: applyMinuteDraft,
+                    onDecrement: { setMinute(minute - 5) },
+                    onIncrement: { setMinute(minute + 5) }
+                )
             }
-            Button("Done", action: onCancel)
+            Button("Done") {
+                applyHourText()
+                applyMinuteText()
+                onCancel()
+            }
                 .buttonStyle(PrimaryButtonStyle())
+                .accessibilityLabel("timePicker.doneButton")
+                .accessibilityIdentifier("timePicker.doneButton")
         }
         .padding(24)
-        .frame(width: 360)
+        .frame(width: 390)
         .background(DreamCueStyle.canvas)
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
+        .accessibilityIdentifier("timePicker")
     }
 
-    private func applyTime(from date: Date) {
-        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
-        let nextHour = components.hour ?? hour
-        let nextMinute = components.minute ?? minute
-        hour = nextHour
-        minute = nextMinute
-        onTimeChanged(nextHour, nextMinute)
+    private func applyHourText() {
+        setHour(Int(hourText) ?? hour)
+    }
+
+    private func applyHourDraft() {
+        if let value = Int(hourText) {
+            hour = min(max(value, 0), 23)
+            onTimeChanged(hour, minute)
+        }
+    }
+
+    private func applyMinuteText() {
+        setMinute(Int(minuteText) ?? minute)
+    }
+
+    private func applyMinuteDraft() {
+        if let value = Int(minuteText) {
+            minute = min(max(value, 0), 59)
+            onTimeChanged(hour, minute)
+        }
+    }
+
+    private func setHour(_ value: Int) {
+        hour = min(max(value, 0), 23)
+        hourText = String(format: "%02d", hour)
+        onTimeChanged(hour, minute)
+    }
+
+    private func setMinute(_ value: Int) {
+        minute = min(max(value, 0), 59)
+        minuteText = String(format: "%02d", minute)
+        onTimeChanged(hour, minute)
+    }
+}
+
+private struct TimeNumberControl: View {
+    let title: String
+    @Binding var text: String
+    let decrementIdentifier: String
+    let fieldIdentifier: String
+    let incrementIdentifier: String
+    let onCommit: () -> Void
+    let onTextChange: () -> Void
+    let onDecrement: () -> Void
+    let onIncrement: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DreamCueStyle.muted)
+            HStack(spacing: 8) {
+                Button("-", action: onDecrement)
+                    .buttonStyle(TimeStepButtonStyle())
+                    .accessibilityLabel(decrementIdentifier)
+                    .accessibilityIdentifier(decrementIdentifier)
+                TimeTextField(
+                    text: $text,
+                    identifier: fieldIdentifier,
+                    onCommit: onCommit,
+                    onTextChange: onTextChange
+                )
+                    .frame(width: 54, height: 38)
+                    .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
+                Button("+", action: onIncrement)
+                    .buttonStyle(TimeStepButtonStyle())
+                    .accessibilityLabel(incrementIdentifier)
+                    .accessibilityIdentifier(incrementIdentifier)
+            }
+        }
+    }
+}
+
+private struct TimeTextField: NSViewRepresentable {
+    @Binding var text: String
+    let identifier: String
+    let onCommit: () -> Void
+    let onTextChange: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onCommit: onCommit, onTextChange: onTextChange)
+    }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = TimeEntryField(string: text)
+        field.delegate = context.coordinator
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.commitAction(_:))
+        field.isBordered = false
+        field.drawsBackground = false
+        field.alignment = .center
+        field.font = NSFont.monospacedDigitSystemFont(ofSize: 17, weight: .semibold)
+        field.focusRingType = .none
+        field.usesSingleLineMode = true
+        field.lineBreakMode = .byClipping
+        field.setAccessibilityIdentifier(identifier)
+        field.setAccessibilityLabel(identifier)
+        field.setAccessibilityValue(text)
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.text = $text
+        context.coordinator.onCommit = onCommit
+        context.coordinator.onTextChange = onTextChange
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+        field.setAccessibilityIdentifier(identifier)
+        field.setAccessibilityLabel(identifier)
+        field.setAccessibilityValue(text)
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var text: Binding<String>
+        var onCommit: () -> Void
+        var onTextChange: () -> Void
+
+        init(text: Binding<String>, onCommit: @escaping () -> Void, onTextChange: @escaping () -> Void) {
+            self.text = text
+            self.onCommit = onCommit
+            self.onTextChange = onTextChange
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
+            field.setAccessibilityValue(field.stringValue)
+            onTextChange()
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text.wrappedValue = field.stringValue
+            field.setAccessibilityValue(field.stringValue)
+            onCommit()
+        }
+
+        @objc func commitAction(_ sender: NSTextField) {
+            text.wrappedValue = sender.stringValue
+            sender.setAccessibilityValue(sender.stringValue)
+            onCommit()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                text.wrappedValue = textView.string
+                control.setAccessibilityValue(textView.string)
+                onCommit()
+                control.window?.makeFirstResponder(nil)
+                return true
+            }
+            return false
+        }
+    }
+}
+
+private final class TimeEntryField: NSTextField {
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted {
+            currentEditor()?.selectAll(nil)
+        }
+        return accepted
     }
 }
 
@@ -811,6 +1020,7 @@ private struct CueRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(memo.content)
+        .accessibilityValue("#\(String(format: "%02d", displayNumber))")
         .offset(y: dragOffset)
         .gesture(
             DragGesture(minimumDistance: 8)
@@ -1078,6 +1288,16 @@ private struct SecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(DreamCueStyle.deepGreen)
             .padding(.horizontal, 22)
             .padding(.vertical, 10)
+            .background(configuration.isPressed ? DreamCueStyle.selected.opacity(0.7) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct TimeStepButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(DreamCueStyle.deepGreen)
+            .frame(width: 34, height: 34)
             .background(configuration.isPressed ? DreamCueStyle.selected.opacity(0.7) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
     }
 }

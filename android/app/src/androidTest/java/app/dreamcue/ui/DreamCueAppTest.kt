@@ -4,17 +4,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
 import app.dreamcue.model.Memo
 import app.dreamcue.model.MemoStatus
 import app.dreamcue.model.ReminderTime
@@ -139,6 +143,69 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Cue sync stays private to the signed-in account.")
             .assertIsDisplayed()
         assert(composeRule.onAllNodesWithText("users/{uid}/memos").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun draggingTodayCueReordersRowsAndRenumbersThem() {
+        var reordered: Pair<Int, Int>? = null
+        var state by mutableStateOf(
+            MainUiState(
+                currentMemos = listOf(activeMemo, secondActiveMemo, thirdActiveMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+                onReorderCurrentMemos = { from, to ->
+                    reordered = from to to
+                    val current = state.currentMemos.toMutableList()
+                    val moved = current.removeAt(from)
+                    current.add(to, moved)
+                    state = state.copy(currentMemos = current)
+                },
+            )
+        }
+
+        composeRule.onNodeWithTag("currentCueNumber.${activeMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
+        composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
+        composeRule.onNodeWithTag("currentCueNumber.${thirdActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#03")
+
+        composeRule.onNodeWithTag("currentCue.${activeMemo.id}")
+            .performTouchInput {
+                down(center)
+                advanceEventTime(700)
+                moveBy(Offset(0f, 190f))
+                up()
+            }
+        composeRule.waitForIdle()
+
+        assert(reordered == (0 to 2))
+        composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
+        composeRule.onNodeWithTag("currentCueNumber.${thirdActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
+        composeRule.onNodeWithTag("currentCueNumber.${activeMemo.id}", useUnmergedTree = true).assertTextEquals("#03")
+        val secondTop = composeRule.onNodeWithText(secondActiveMemo.content).fetchSemanticsNode().boundsInRoot.top
+        val activeTop = composeRule.onNodeWithText(activeMemo.content).fetchSemanticsNode().boundsInRoot.top
+        assert(secondTop < activeTop)
     }
 
     @Test
@@ -755,6 +822,32 @@ class DreamCueAppTest {
             reminderCount = 1,
             lastReviewedAtMs = null,
             displayOrder = 1_700_000_060_000,
+            pinned = false,
+        )
+
+        val secondActiveMemo = Memo(
+            id = "active-2",
+            content = "Review ordered cue sync",
+            status = MemoStatus.ACTIVE,
+            createdAtMs = 1_700_000_001_000,
+            updatedAtMs = 1_700_000_050_000,
+            clearedAtMs = null,
+            reminderCount = 0,
+            lastReviewedAtMs = null,
+            displayOrder = 1_700_000_050_000,
+            pinned = false,
+        )
+
+        val thirdActiveMemo = Memo(
+            id = "active-3",
+            content = "Confirm drag numbering",
+            status = MemoStatus.ACTIVE,
+            createdAtMs = 1_700_000_002_000,
+            updatedAtMs = 1_700_000_040_000,
+            clearedAtMs = null,
+            reminderCount = 0,
+            lastReviewedAtMs = null,
+            displayOrder = 1_700_000_040_000,
             pinned = false,
         )
 

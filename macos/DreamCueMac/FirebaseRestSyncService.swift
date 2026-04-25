@@ -40,19 +40,7 @@ final class FirebaseRestSyncService {
     func uploadDeletedMemo(id: String, deletedAtMs: Int64? = nil) async {
         guard let session, !databaseURL.isEmpty else { return }
         let now = deletedAtMs ?? Int64(Date().timeIntervalSince1970 * 1000)
-        let fields: [String: Any] = [
-            "content": "",
-            "status": "cleared",
-            "created_at_ms": now,
-            "updated_at_ms": now,
-            "cleared_at_ms": now,
-            "reminder_count": 0,
-            "last_reviewed_at_ms": now,
-            "display_order": now,
-            "pinned": false,
-            "deleted": true,
-        ]
-        await patchDocument(id: id, fields: fields, session: session)
+        await patchDocument(id: id, fields: firebaseDeletedMemoDocumentFields(deletedAtMs: now), session: session)
     }
 
     func fetchMemoRecords() async -> [RemoteMemoRecord] {
@@ -104,19 +92,7 @@ final class FirebaseRestSyncService {
 
     private func uploadMemo(_ memo: Memo) async {
         guard let session, !databaseURL.isEmpty else { return }
-        let fields: [String: Any] = [
-            "content": memo.content,
-            "status": memo.status.rawValue,
-            "created_at_ms": memo.createdAtMs,
-            "updated_at_ms": memo.updatedAtMs,
-            "cleared_at_ms": jsonValue(memo.clearedAtMs),
-            "reminder_count": memo.reminderCount,
-            "last_reviewed_at_ms": jsonValue(memo.lastReviewedAtMs),
-            "display_order": memo.displayOrder,
-            "pinned": memo.pinned,
-            "deleted": false,
-        ]
-        await patchDocument(id: memo.id, fields: fields, session: session)
+        await patchDocument(id: memo.id, fields: firebaseMemoDocumentFields(memo), session: session)
     }
 
     private func patchDocument(id: String, fields: [String: Any], session: Session) async {
@@ -207,4 +183,34 @@ private func boolField(_ value: Any?) -> Bool {
 
 private func jsonValue(_ value: Int64?) -> Any {
     value ?? NSNull()
+}
+
+func firebaseMemoDocumentFields(_ memo: Memo) -> [String: Any] {
+    [
+        "content": memo.content,
+        "status": memo.status.rawValue,
+        "created_at_ms": memo.createdAtMs,
+        "updated_at_ms": memo.updatedAtMs,
+        "cleared_at_ms": jsonValue(memo.clearedAtMs),
+        "reminder_count": memo.reminderCount,
+        "last_reviewed_at_ms": jsonValue(memo.lastReviewedAtMs),
+        "display_order": memo.displayOrder,
+        "pinned": memo.pinned,
+        "deleted": false,
+    ]
+}
+
+func firebaseDeletedMemoDocumentFields(deletedAtMs: Int64) -> [String: Any] {
+    [
+        "content": "",
+        "status": "cleared",
+        "created_at_ms": deletedAtMs,
+        "updated_at_ms": deletedAtMs,
+        "cleared_at_ms": deletedAtMs,
+        "reminder_count": 0,
+        "last_reviewed_at_ms": deletedAtMs,
+        "display_order": deletedAtMs,
+        "pinned": false,
+        "deleted": true,
+    ]
 }

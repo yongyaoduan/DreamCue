@@ -36,8 +36,12 @@ enum class MemoScreen(
         subtitle = "Cleared memos stay here",
     ),
     REMINDER(
-        title = "Reminder Settings",
-        subtitle = "Set the daily reminder time",
+        title = "Reminder Rhythm",
+        subtitle = "A quiet daily return point",
+    ),
+    ACCOUNT(
+        title = "Account",
+        subtitle = "Private sync across devices",
     ),
 }
 

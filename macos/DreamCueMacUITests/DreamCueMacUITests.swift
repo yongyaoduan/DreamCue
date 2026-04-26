@@ -64,7 +64,7 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
         assertNewCueSheetLayout(app)
         attachScreenshot("mac-new-cue-redesign", app: app)
-        app.textViews["Cue Text"].click()
+        focusCueEditor(app)
         paste(cueText, app: app)
         app.typeKey(.return, modifierFlags: .command)
         XCTAssertTrue(app.staticTexts["New Cue"].exists)
@@ -338,13 +338,21 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     private func createCue(_ text: String, app: XCUIApplication) {
-        closeSystemOverlays()
         app.activate()
-        app.buttons["New Cue"].click()
+        let newCue = app.buttons["New Cue"].firstMatch
+        XCTAssertTrue(newCue.waitForExistence(timeout: 5))
+        newCue.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
-        app.textViews["Cue Text"].click()
+        focusCueEditor(app)
         paste(text, app: app)
         app.buttons["Save"].click()
+    }
+
+    private func focusCueEditor(_ app: XCUIApplication) {
+        let editor = app.scrollViews["Cue Text"].firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue(editor.isHittable)
+        editor.click()
     }
 
     private func clickTrailingSideOf(_ element: XCUIElement) {

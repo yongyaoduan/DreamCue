@@ -525,7 +525,11 @@ private struct CommittingTextEditor: NSViewRepresentable {
         textView.drawsBackground = false
         textView.isRichText = false
         textView.allowsUndo = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 12, height: 12)
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.setAccessibilityLabel(accessibilityLabel)
         textView.setAccessibilityIdentifier(accessibilityLabel)
@@ -545,6 +549,10 @@ private struct CommittingTextEditor: NSViewRepresentable {
         context.coordinator.update(text: $text, onCommit: onCommit)
         guard let textView = scrollView.documentView as? CommitTextView else { return }
         textView.onCommit = onCommit
+        let contentWidth = scrollView.contentSize.width
+        if contentWidth > 0, abs(textView.frame.width - contentWidth) > 0.5 {
+            textView.frame.size.width = contentWidth
+        }
         guard textView.string != text else { return }
         textView.string = text
     }

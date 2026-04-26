@@ -165,6 +165,26 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     @objc
+    func testDraggingCueFollowsPointerWhileHeld() {
+        let app = launchIsolatedApp()
+        let firstCue = "first_hold_\(UUID().uuidString.prefix(6))"
+        let secondCue = "second_hold_\(UUID().uuidString.prefix(6))"
+        let thirdCue = "third_hold_\(UUID().uuidString.prefix(6))"
+
+        XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
+        createCue(firstCue, app: app)
+        createCue(secondCue, app: app)
+        createCue(thirdCue, app: app)
+        XCTAssertTrue(app.buttons[thirdCue].waitForExistence(timeout: 5))
+        app.buttons[thirdCue].press(
+            forDuration: 0.45,
+            thenDragTo: app.buttons[firstCue],
+            withVelocity: .slow,
+            thenHoldForDuration: 3.0
+        )
+    }
+
+    @objc
     func testArchiveSearchShowsAllWhenEmptyAndFiltersByText() {
         let app = launchIsolatedApp()
         let firstCue = "alpha_archive_\(UUID().uuidString.prefix(6))"
@@ -264,6 +284,59 @@ final class DreamCueMacUITests: XCTestCase {
         attachScreenshot("mac-sync-created-local-memo", app: app)
     }
 
+    @objc
+    func testFirebaseOrderSyncPullsAndroidOrderWhenConfigured() throws {
+        let syncMarkerPath = "/tmp/dreamcue-run-firebase-order-pull-test"
+        let isSyncEnabled = ProcessInfo.processInfo.environment["DREAMCUE_RUN_FIREBASE_ORDER_PULL_TEST"] == "1"
+            || FileManager.default.fileExists(atPath: syncMarkerPath)
+        guard isSyncEnabled else {
+            throw XCTSkip("Firebase order pull test is disabled.")
+        }
+        let email = try syncEnvironment("DREAMCUE_SYNC_EMAIL", fallbackPath: "/tmp/dreamcue-order-sync-a2m-email.txt")
+        let password = try syncEnvironment("DREAMCUE_SYNC_PASSWORD", fallbackPath: "/tmp/dreamcue-order-sync-a2m-password.txt")
+        let expectedOrder = try syncEnvironment(
+            "DREAMCUE_EXPECTED_ORDER",
+            fallbackPath: "/tmp/dreamcue-order-sync-a2m-expected-order.txt"
+        )
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let app = launchIsolatedApp(function: #function)
+
+        signInSync(email: email, password: password, app: app)
+        app.buttons["Today"].firstMatch.click()
+        assertVisibleOrder(expectedOrder, app: app)
+        attachScreenshot("mac-sync-pulled-android-order", app: app)
+    }
+
+    @objc
+    func testFirebaseOrderSyncUploadsMacOrderWhenConfigured() throws {
+        let syncMarkerPath = "/tmp/dreamcue-run-firebase-order-upload-test"
+        let isSyncEnabled = ProcessInfo.processInfo.environment["DREAMCUE_RUN_FIREBASE_ORDER_UPLOAD_TEST"] == "1"
+            || FileManager.default.fileExists(atPath: syncMarkerPath)
+        guard isSyncEnabled else {
+            throw XCTSkip("Firebase order upload test is disabled.")
+        }
+        let email = try syncEnvironment("DREAMCUE_SYNC_EMAIL", fallbackPath: "/tmp/dreamcue-order-sync-m2a-email.txt")
+        let password = try syncEnvironment("DREAMCUE_SYNC_PASSWORD", fallbackPath: "/tmp/dreamcue-order-sync-m2a-password.txt")
+        let prefix = try syncEnvironment("DREAMCUE_MAC_ORDER_PREFIX", fallbackPath: "/tmp/dreamcue-order-sync-m2a-prefix.txt")
+        let firstCue = "\(prefix)_first"
+        let secondCue = "\(prefix)_second"
+        let thirdCue = "\(prefix)_third"
+        let app = launchIsolatedApp(function: #function)
+
+        signInSync(email: email, password: password, app: app)
+        app.buttons["Today"].firstMatch.click()
+        createCue(firstCue, app: app)
+        createCue(secondCue, app: app)
+        createCue(thirdCue, app: app)
+        assertVisibleOrder([thirdCue, secondCue, firstCue], app: app)
+
+        app.buttons[thirdCue].press(forDuration: 0.7, thenDragTo: app.buttons[firstCue])
+        assertVisibleOrder([secondCue, firstCue, thirdCue], app: app)
+        attachScreenshot("mac-sync-uploaded-mac-order", app: app)
+    }
+
     private func createCue(_ text: String, app: XCUIApplication) {
         closeSystemOverlays()
         app.activate()
@@ -280,7 +353,7 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     private func assertNewCueSheetLayout(_ app: XCUIApplication) {
-        let editor = app.textViews["Cue Text"].firstMatch
+        let editor = app.scrollViews["Cue Text"].firstMatch
         let save = app.buttons["Save"].firstMatch
         let cancel = app.buttons["Cancel"].firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
@@ -293,6 +366,27 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertLessThanOrEqual(abs(save.frame.maxX - editor.frame.maxX), 2)
         XCTAssertGreaterThanOrEqual(editor.frame.minX, 0)
         XCTAssertGreaterThan(cancel.frame.minX, editor.frame.minX)
+    }
+
+    private func signInSync(email: String, password: String, app: XCUIApplication) {
+        app.buttons["Account"].firstMatch.click()
+        XCTAssertTrue(app.staticTexts["Sync Account"].waitForExistence(timeout: 5))
+        app.textFields["Email"].click()
+        paste(email, app: app)
+        app.secureTextFields["Password"].click()
+        paste(password, app: app)
+        app.buttons["Sign In"].click()
+        XCTAssertTrue(app.staticTexts["Sync Health"].waitForExistence(timeout: 25))
+    }
+
+    private func assertVisibleOrder(_ expectedOrder: [String], app: XCUIApplication) {
+        for (index, cue) in expectedOrder.enumerated() {
+            XCTAssertTrue(app.buttons[cue].waitForExistence(timeout: 30), "Expected \(cue) to exist.")
+            XCTAssertEqual(app.buttons[cue].value as? String, "#\(String(format: "%02d", index + 1))")
+        }
+        for (before, after) in zip(expectedOrder, expectedOrder.dropFirst()) {
+            XCTAssertLessThan(app.buttons[before].frame.minY, app.buttons[after].frame.minY)
+        }
     }
 
     private func assertSidebarButtonFillsRow(_ element: XCUIElement) {

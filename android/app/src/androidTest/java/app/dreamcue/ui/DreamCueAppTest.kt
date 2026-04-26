@@ -27,6 +27,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.junit.Rule
 import org.junit.Test
+import java.io.File
 import kotlin.math.roundToInt
 
 class DreamCueAppTest {
@@ -206,6 +207,59 @@ class DreamCueAppTest {
         val secondTop = composeRule.onNodeWithText(secondActiveMemo.content).fetchSemanticsNode().boundsInRoot.top
         val activeTop = composeRule.onNodeWithText(activeMemo.content).fetchSemanticsNode().boundsInRoot.top
         assert(secondTop < activeTop)
+    }
+
+    @Test
+    fun draggingTodayCueFollowsFingerBeforeRelease() {
+        var state by mutableStateOf(
+            MainUiState(
+                currentMemos = listOf(activeMemo, secondActiveMemo, thirdActiveMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+                onReorderCurrentMemos = { _, _ -> },
+            )
+        }
+
+        val cue = composeRule.onNodeWithTag("currentCue.${activeMemo.id}")
+        cue.performTouchInput {
+            down(center)
+            advanceEventTime(700)
+        }
+        cue.performTouchInput {
+            moveBy(Offset(0f, 140f))
+        }
+        composeRule.waitForIdle()
+
+        val draggingOffset = cue.fetchSemanticsNode().config[CueDragOffsetYKey]
+        assert(draggingOffset > 90f)
+        takeDeviceScreenshotIfRequested()
+
+        cue.performTouchInput {
+            up()
+        }
     }
 
     @Test
@@ -809,6 +863,13 @@ class DreamCueAppTest {
         composeRule.onNodeWithContentDescription("Restore cue").performClick()
         assert(restoredMemoId == archivedMemo.id)
         assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
+    }
+
+    private fun takeDeviceScreenshotIfRequested() {
+        val name = InstrumentationRegistry.getArguments().getString("dreamcueScreenshotName") ?: return
+        val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val file = File("/sdcard/Download/$safeName.png")
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(file)
     }
 
     private companion object {

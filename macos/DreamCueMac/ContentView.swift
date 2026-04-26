@@ -536,6 +536,8 @@ private struct CommittingTextEditor: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
         scrollView.documentView = textView
+        scrollView.setAccessibilityLabel(accessibilityLabel)
+        scrollView.setAccessibilityIdentifier(accessibilityLabel)
         return scrollView
     }
 
@@ -977,7 +979,12 @@ private struct CueRow: View {
     let rowCount: Int
     let onOpen: (Memo) -> Void
     let onMove: (Int, Int) -> Void
-    @State private var dragOffset: CGFloat = 0
+    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var isDragging = false
+
+    private var dragPresentation: CueDragPresentation {
+        CueDragPresentation(translationY: dragTranslation, isDragging: isDragging || dragTranslation != 0)
+    }
 
     var body: some View {
         Button {
@@ -1021,16 +1028,32 @@ private struct CueRow: View {
         .buttonStyle(.plain)
         .accessibilityLabel(memo.content)
         .accessibilityValue("#\(String(format: "%02d", displayNumber))")
-        .offset(y: dragOffset)
-        .gesture(
+        .offset(y: dragPresentation.offsetY)
+        .scaleEffect(dragPresentation.scale)
+        .zIndex(isDragging ? 1 : 0)
+        .shadow(
+            color: .black.opacity(isDragging ? 0.14 : 0),
+            radius: dragPresentation.shadowRadius,
+            y: dragPresentation.shadowOffsetY
+        )
+        .animation(.spring(response: 0.2, dampingFraction: 0.82), value: isDragging)
+        .highPriorityGesture(
             DragGesture(minimumDistance: 8)
+                .updating($dragTranslation) { value, state, _ in
+                    state = value.translation.height
+                }
                 .onChanged { value in
-                    dragOffset = value.translation.height
+                    isDragging = true
                 }
                 .onEnded { value in
-                    let rowStep = Int((value.translation.height / 78).rounded())
-                    let target = min(max(index + rowStep, 0), rowCount - 1)
-                    dragOffset = 0
+                    let target = CueDragPresentation.targetIndex(
+                        index: index,
+                        rowCount: rowCount,
+                        translationY: value.translation.height
+                    )
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+                        isDragging = false
+                    }
                     if target != index {
                         onMove(index, target)
                     }

@@ -3,10 +3,12 @@ package app.dreamcue.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
@@ -95,6 +97,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -106,6 +110,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import app.dreamcue.R
 import app.dreamcue.model.Memo
 import java.text.SimpleDateFormat
@@ -125,6 +130,8 @@ private val Clay = Color(0xFFC4614B)
 private val Line = Color(0xFFD9D1C4)
 private val DeepForest = Color(0xFF0F3D2E)
 private val ScreenPadding = PaddingValues(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 18.dp)
+val CueDragOffsetYKey = SemanticsPropertyKey<Float>("CueDragOffsetY")
+var SemanticsPropertyReceiver.cueDragOffsetY by CueDragOffsetYKey
 
 private val DreamCueColorScheme = lightColorScheme(
     primary = Forest,
@@ -1131,14 +1138,36 @@ private fun ReorderableCueCard(
     count: Int,
     onMove: (Int, Int) -> Unit,
 ) {
-    var dragOffset by remember { mutableStateOf(0f) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+    val visibleDragOffset by animateFloatAsState(
+        targetValue = if (isDragging) dragOffset else 0f,
+        animationSpec = spring(stiffness = 700f, dampingRatio = 0.82f),
+        label = "cueDragOffset",
+    )
+    val dragLift by animateFloatAsState(
+        targetValue = if (isDragging) 1f else 0f,
+        animationSpec = spring(stiffness = 650f, dampingRatio = 0.86f),
+        label = "cueDragLift",
+    )
 
     Box(
         modifier = Modifier
             .testTag("currentCue.${memo.id}")
-            .graphicsLayer { translationY = dragOffset }
+            .zIndex(if (isDragging) 1f else 0f)
+            .graphicsLayer {
+                translationY = visibleDragOffset
+                scaleX = 1f + dragLift * 0.012f
+                scaleY = 1f + dragLift * 0.012f
+                shadowElevation = dragLift * 18f
+            }
+            .semantics { cueDragOffsetY = visibleDragOffset }
             .pointerInput(index, count) {
-                detectDragGesturesAfterLongPress(
+                detectDragGestures(
+                    onDragStart = {
+                        isDragging = true
+                        dragOffset = 0f
+                    },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         dragOffset += dragAmount.y
@@ -1146,12 +1175,14 @@ private fun ReorderableCueCard(
                     onDragEnd = {
                         val rowStep = (dragOffset / 88f).roundToInt()
                         val target = (index + rowStep).coerceIn(0, count - 1)
+                        isDragging = false
                         dragOffset = 0f
                         if (target != index) {
                             onMove(index, target)
                         }
                     },
                     onDragCancel = {
+                        isDragging = false
                         dragOffset = 0f
                     },
                 )

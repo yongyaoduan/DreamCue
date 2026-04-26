@@ -16,6 +16,7 @@
 		0A0000010000000000000007 /* DreamCueMacUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000017 /* DreamCueMacUITests.swift */; };
 		0A0000010000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000019 /* Assets.xcassets */; };
 		0A000001000000000000000A /* SyncMergePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000001A /* SyncMergePolicy.swift */; };
+		0A000001000000000000000B /* CueDragPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000001B /* CueDragPresentation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +41,7 @@
 		0A0000010000000000000018 /* DreamCueMacUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DreamCueMacUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A0000010000000000000019 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0A000001000000000000001A /* SyncMergePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncMergePolicy.swift; sourceTree = "<group>"; };
+		0A000001000000000000001B /* CueDragPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CueDragPresentation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +68,7 @@
 				0A0000010000000000000014 /* MemoStore.swift */,
 				0A0000010000000000000015 /* FirebaseRestSyncService.swift */,
 				0A000001000000000000001A /* SyncMergePolicy.swift */,
+				0A000001000000000000001B /* CueDragPresentation.swift */,
 				0A0000010000000000000016 /* FirebaseConfig.plist */,
 				0A0000010000000000000019 /* Assets.xcassets */,
 			);
@@ -165,7 +168,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		0A0000010000000000000042 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ( 0A0000010000000000000001 /* DreamCueMacApp.swift in Sources */, 0A0000010000000000000002 /* ContentView.swift in Sources */, 0A0000010000000000000003 /* Memo.swift in Sources */, 0A0000010000000000000004 /* MemoStore.swift in Sources */, 0A0000010000000000000005 /* FirebaseRestSyncService.swift in Sources */, 0A000001000000000000000A /* SyncMergePolicy.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		0A0000010000000000000042 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ( 0A0000010000000000000001 /* DreamCueMacApp.swift in Sources */, 0A0000010000000000000002 /* ContentView.swift in Sources */, 0A0000010000000000000003 /* Memo.swift in Sources */, 0A0000010000000000000004 /* MemoStore.swift in Sources */, 0A0000010000000000000005 /* FirebaseRestSyncService.swift in Sources */, 0A000001000000000000000A /* SyncMergePolicy.swift in Sources */, 0A000001000000000000000B /* CueDragPresentation.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 		0A0000010000000000000044 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = ( 0A0000010000000000000007 /* DreamCueMacUITests.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 

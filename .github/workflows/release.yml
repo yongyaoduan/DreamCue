@@ -127,7 +127,13 @@ jobs:
           xcode-version: latest-stable
 
       - name: Run macOS UI tests
-        run: xcodebuild -project macos/DreamCueMac.xcodeproj -scheme DreamCueMac -destination 'platform=macOS' test
+        env:
+          DREAMCUE_SKIP_FIREBASE_SYNC_TESTS: "1"
+        run: |
+          xcodebuild -project macos/DreamCueMac.xcodeproj -scheme DreamCueMac -destination 'platform=macOS' test \
+            -skip-testing:DreamCueMacUITests/DreamCueMacUITests/testFirebaseSyncPullsRemoteAndUploadsLocalWhenConfigured \
+            -skip-testing:DreamCueMacUITests/DreamCueMacUITests/testFirebaseOrderSyncPullsAndroidOrderWhenConfigured \
+            -skip-testing:DreamCueMacUITests/DreamCueMacUITests/testFirebaseOrderSyncUploadsMacOrderWhenConfigured
 
       - name: Import Developer ID certificate
         if: env.MACOS_CERTIFICATE_P12_BASE64 != ''

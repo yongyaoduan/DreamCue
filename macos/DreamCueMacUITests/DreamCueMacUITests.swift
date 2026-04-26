@@ -94,8 +94,7 @@ final class DreamCueMacUITests: XCTestCase {
         let cueText = "mac_design_\(UUID().uuidString.prefix(8))"
 
         XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
-        app.buttons["New Cue"].click()
-        XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
+        openNewCueEditor(app)
         assertNewCueSheetLayout(app)
         attachScreenshot("mac-new-cue-redesign", app: app)
         focusCueEditor(app)
@@ -309,8 +308,10 @@ final class DreamCueMacUITests: XCTestCase {
     @objc
     func testFirebaseSyncPullsRemoteAndUploadsLocalWhenConfigured() throws {
         let syncMarkerPath = "/tmp/dreamcue-run-firebase-sync-test"
-        let isSyncEnabled = ProcessInfo.processInfo.environment["DREAMCUE_RUN_FIREBASE_SYNC_TEST"] == "1"
-            || FileManager.default.fileExists(atPath: syncMarkerPath)
+        let isSyncEnabled = isFirebaseSyncTestEnabled(
+            environmentKey: "DREAMCUE_RUN_FIREBASE_SYNC_TEST",
+            markerPath: syncMarkerPath
+        )
         guard isSyncEnabled else {
             throw XCTSkip("Firebase sync test is disabled.")
         }
@@ -343,8 +344,10 @@ final class DreamCueMacUITests: XCTestCase {
     @objc
     func testFirebaseOrderSyncPullsAndroidOrderWhenConfigured() throws {
         let syncMarkerPath = "/tmp/dreamcue-run-firebase-order-pull-test"
-        let isSyncEnabled = ProcessInfo.processInfo.environment["DREAMCUE_RUN_FIREBASE_ORDER_PULL_TEST"] == "1"
-            || FileManager.default.fileExists(atPath: syncMarkerPath)
+        let isSyncEnabled = isFirebaseSyncTestEnabled(
+            environmentKey: "DREAMCUE_RUN_FIREBASE_ORDER_PULL_TEST",
+            markerPath: syncMarkerPath
+        )
         guard isSyncEnabled else {
             throw XCTSkip("Firebase order pull test is disabled.")
         }
@@ -368,8 +371,10 @@ final class DreamCueMacUITests: XCTestCase {
     @objc
     func testFirebaseOrderSyncUploadsMacOrderWhenConfigured() throws {
         let syncMarkerPath = "/tmp/dreamcue-run-firebase-order-upload-test"
-        let isSyncEnabled = ProcessInfo.processInfo.environment["DREAMCUE_RUN_FIREBASE_ORDER_UPLOAD_TEST"] == "1"
-            || FileManager.default.fileExists(atPath: syncMarkerPath)
+        let isSyncEnabled = isFirebaseSyncTestEnabled(
+            environmentKey: "DREAMCUE_RUN_FIREBASE_ORDER_UPLOAD_TEST",
+            markerPath: syncMarkerPath
+        )
         guard isSyncEnabled else {
             throw XCTSkip("Firebase order upload test is disabled.")
         }
@@ -394,11 +399,7 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     private func createCue(_ text: String, app: XCUIApplication) {
-        app.activate()
-        let newCue = app.buttons["New Cue"].firstMatch
-        XCTAssertTrue(newCue.waitForExistence(timeout: 5))
-        newCue.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
-        XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
+        openNewCueEditor(app)
         focusCueEditor(app)
         paste(text, app: app)
         app.buttons["Save"].click()
@@ -417,8 +418,40 @@ final class DreamCueMacUITests: XCTestCase {
     private func focusCueEditor(_ app: XCUIApplication) {
         let editor = app.scrollViews["Cue Text"].firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        for _ in 0..<3 {
+            app.activate()
+            if editor.isHittable {
+                editor.click()
+                return
+            }
+            usleep(200_000)
+        }
         XCTAssertTrue(editor.isHittable)
         editor.click()
+    }
+
+    private func openNewCueEditor(_ app: XCUIApplication) {
+        app.activate()
+        let editor = app.scrollViews["Cue Text"].firstMatch
+        if editor.waitForExistence(timeout: 1) {
+            return
+        }
+        let newCue = app.buttons["New Cue"].firstMatch
+        XCTAssertTrue(newCue.waitForExistence(timeout: 5))
+        for attempt in 0..<3 {
+            app.activate()
+            if attempt == 2 {
+                app.typeKey("n", modifierFlags: .command)
+            } else {
+                newCue.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+            }
+            if editor.waitForExistence(timeout: 2) {
+                XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
+                return
+            }
+        }
+        XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
     }
 
     private func dismissSystemSettingsIfOpen(app: XCUIApplication) {
@@ -503,19 +536,6 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     private func closeSystemOverlays() {
-        let bundleIdentifiers = [
-            "com.apple.systempreferences",
-            "com.apple.notificationcenterui",
-            "com.apple.tips",
-            "net.hearthsim.hstracker",
-            "app.livenotes.mac",
-        ]
-        for bundleIdentifier in bundleIdentifiers {
-            let app = XCUIApplication(bundleIdentifier: bundleIdentifier)
-            if app.exists {
-                app.terminate()
-            }
-        }
     }
 
     private func syncEnvironment(_ key: String, fallbackPath: String) throws -> String {
@@ -530,6 +550,14 @@ final class DreamCueMacUITests: XCTestCase {
             return fileValue
         }
         throw XCTSkip("Firebase sync credentials are not configured.")
+    }
+
+    private func isFirebaseSyncTestEnabled(environmentKey: String, markerPath: String) -> Bool {
+        if ProcessInfo.processInfo.environment["DREAMCUE_SKIP_FIREBASE_SYNC_TESTS"] == "1" {
+            return false
+        }
+        return ProcessInfo.processInfo.environment[environmentKey] == "1"
+            || FileManager.default.fileExists(atPath: markerPath)
     }
 
     private func paste(_ text: String, app: XCUIApplication) {

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_PATH="$ROOT_DIR/macos/DreamCueMac.xcodeproj"
 SCHEME_NAME="DreamCueMac"
-APP_NAME="DreamCueMac"
+APP_NAME="DreamCue"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-/tmp/dreamcue-macos-release}"
 BUILD_APP_PATH="$DERIVED_DATA_PATH/Build/Products/Release/$APP_NAME.app"
 DIST_DIR="${DREAMCUE_RELEASE_DIST_DIR:-$ROOT_DIR/dist}"

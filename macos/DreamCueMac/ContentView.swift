@@ -20,87 +20,96 @@ struct ContentView: View {
             .background(DreamCueStyle.canvas)
 
             if isNewCuePresented {
-                ModalOverlay(onDismiss: {
+                ModalSurface {
+                    ModalOverlay(onDismiss: {
                     store.draft = ""
                     isNewCuePresented = false
-                }) {
-                    NewCueSheet(
-                        draft: $store.draft,
-                        onCancel: {
-                            store.draft = ""
-                            isNewCuePresented = false
-                        },
-                        onSave: {
-                            store.addMemo()
-                            isNewCuePresented = false
-                        }
-                    )
+                    }) {
+                        NewCueSheet(
+                            draft: $store.draft,
+                            onCancel: {
+                                store.draft = ""
+                                isNewCuePresented = false
+                            },
+                            onSave: {
+                                store.addMemo()
+                                isNewCuePresented = false
+                            }
+                        )
+                    }
                 }
             }
 
             if let memo = selectedMemo {
-                ModalOverlay(onDismiss: dismissDetailSavingDraft) {
-                    CueDetailSheet(
-                        memo: memo,
-                        draft: $detailDraft,
-                        onSave: {
-                            saveDetailAndDismiss(memo)
-                        },
-                        onClear: {
-                            store.clearMemo(memo)
-                            selectedMemo = nil
-                        },
-                        onReopen: {
-                            store.reopenMemo(memo)
-                            selectedMemo = nil
-                        },
-                        onSetPinned: { pinned in
-                            store.setMemoPinned(memo, pinned: pinned)
-                            selectedMemo = nil
-                        },
-                        onDelete: {
-                            store.deleteMemo(memo)
-                            selectedMemo = nil
-                        }
-                    )
+                ModalSurface {
+                    ModalOverlay(onDismiss: dismissDetailSavingDraft) {
+                        CueDetailSheet(
+                            memo: memo,
+                            draft: $detailDraft,
+                            onSave: {
+                                saveDetailAndDismiss(memo)
+                            },
+                            onClear: {
+                                store.clearMemo(memo)
+                                selectedMemo = nil
+                            },
+                            onReopen: {
+                                store.reopenMemo(memo)
+                                selectedMemo = nil
+                            },
+                            onSetPinned: { pinned in
+                                store.setMemoPinned(memo, pinned: pinned)
+                                selectedMemo = nil
+                            },
+                            onDelete: {
+                                store.deleteMemo(memo)
+                                selectedMemo = nil
+                            }
+                        )
+                    }
                 }
             }
 
             if isTimePickerPresented {
-                ModalOverlay(onDismiss: {
-                    isTimePickerPresented = false
-                }) {
-                    ReminderTimePickerSheet(
-                        hour: $selectedHour,
-                        minute: $selectedMinute,
-                        onCancel: {
-                            isTimePickerPresented = false
-                        },
-                        onTimeChanged: { hour, minute in
-                            store.setReminderTime(hour: hour, minute: minute)
-                        }
-                    )
+                ModalSurface {
+                    ModalOverlay(onDismiss: {
+                        isTimePickerPresented = false
+                    }) {
+                        ReminderTimePickerSheet(
+                            hour: $selectedHour,
+                            minute: $selectedMinute,
+                            onCancel: {
+                                isTimePickerPresented = false
+                            },
+                            onTimeChanged: { hour, minute in
+                                store.setReminderTime(hour: hour, minute: minute)
+                            }
+                        )
+                    }
                 }
             }
         }
         .frame(minWidth: 980, minHeight: 650)
         .background(AppFocusRestorer())
+        .onReceive(NotificationCenter.default.publisher(for: .dreamCueNewCueRequested)) { _ in
+            presentNewCue()
+        }
     }
 
     private var sidebar: some View {
         VStack(spacing: 18) {
             VStack(spacing: 6) {
                 SidebarButton(title: "Today", systemImage: "house", isSelected: store.selectedTab == 0) {
-                    store.selectedTab = 0
+                    selectTab(0)
                 }
                 SidebarButton(title: "Archive", systemImage: "archivebox", isSelected: store.selectedTab == 1) {
-                    store.selectedTab = 1
+                    selectTab(1)
                 }
                 SidebarButton(title: "Rhythm", systemImage: "clock", isSelected: store.selectedTab == 2) {
-                    store.selectedTab = 2
+                    selectTab(2)
                 }
                 SidebarButton(title: "Account", systemImage: "person.crop.circle", isSelected: store.selectedTab == 3) {
-                    store.selectedTab = 3
+                    selectTab(3)
                 }
             }
             .padding(.top, 18)
@@ -119,7 +128,7 @@ struct ContentView: View {
             TodayView(
                 currentMemos: store.currentMemos,
                 reminderTime: store.reminderTimeText,
-                onNewCue: { isNewCuePresented = true },
+                onNewCue: presentNewCue,
                 onOpen: openMemo,
                 onMove: store.moveCurrentMemo
             )
@@ -154,6 +163,7 @@ struct ContentView: View {
     }
 
     private func openMemo(_ memo: Memo) {
+        dismissPresentedSurface()
         detailDraft = memo.content
         selectedHour = store.reminderHour
         selectedMinute = store.reminderMinute
@@ -172,6 +182,29 @@ struct ContentView: View {
             store.updateMemo(memo, content: detailDraft)
         }
         selectedMemo = nil
+    }
+
+    private func selectTab(_ tab: Int) {
+        dismissPresentedSurface()
+        store.selectedTab = tab
+    }
+
+    private func presentNewCue() {
+        dismissPresentedSurface()
+        store.selectedTab = 0
+        store.draft = ""
+        isNewCuePresented = true
+    }
+
+    private func dismissPresentedSurface() {
+        if selectedMemo != nil {
+            dismissDetailSavingDraft()
+        }
+        if isNewCuePresented {
+            store.draft = ""
+            isNewCuePresented = false
+        }
+        isTimePickerPresented = false
     }
 }
 
@@ -202,15 +235,18 @@ private struct TodayView: View {
     let onNewCue: () -> Void
     let onOpen: (Memo) -> Void
     let onMove: (Int, Int) -> Void
+    @State private var dragPreview: CueDragPreview?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Good evening")
-                            .font(.system(size: 26, weight: .regular, design: .serif))
-                            .foregroundStyle(DreamCueStyle.ink)
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            Text(TimeOfDayGreeting.text(for: context.date))
+                                .font(.system(size: 26, weight: .regular, design: .serif))
+                                .foregroundStyle(DreamCueStyle.ink)
+                        }
                         Text("Capture what matters. We'll keep it in rhythm.")
                             .foregroundStyle(DreamCueStyle.muted)
                     }
@@ -266,12 +302,27 @@ private struct TodayView: View {
                     } else {
                         VStack(spacing: 10) {
                             ForEach(Array(currentMemos.enumerated()), id: \.element.id) { index, memo in
+                                let avoidanceOffset = dragPreview.map {
+                                    CueDragPresentation.displacedOffset(
+                                        rowIndex: index,
+                                        sourceIndex: $0.sourceIndex,
+                                        targetIndex: $0.targetIndex
+                                    )
+                                } ?? 0
                                 CueRow(
                                     memo: memo,
                                     displayNumber: index + 1,
                                     index: index,
                                     rowCount: currentMemos.count,
+                                    avoidanceOffset: avoidanceOffset,
                                     onOpen: onOpen,
+                                    onDragPreviewChange: { targetIndex in
+                                        if let targetIndex {
+                                            dragPreview = CueDragPreview(sourceIndex: index, targetIndex: targetIndex)
+                                        } else {
+                                            dragPreview = nil
+                                        }
+                                    },
                                     onMove: onMove
                                 )
                             }
@@ -283,6 +334,11 @@ private struct TodayView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
+}
+
+private struct CueDragPreview: Equatable {
+    let sourceIndex: Int
+    let targetIndex: Int
 }
 
 private struct ArchiveView: View {
@@ -495,6 +551,20 @@ private struct AccountView: View {
     }
 }
 
+private struct ModalSurface<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Color.clear
+                .frame(width: 140)
+                .allowsHitTesting(false)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
 private struct ModalOverlay<Content: View>: View {
     let onDismiss: () -> Void
     @ViewBuilder let content: Content
@@ -608,6 +678,53 @@ private final class CommitTextView: NSTextView {
     }
 }
 
+private struct ReturnCommitHandler: NSViewRepresentable {
+    let onCommit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCommit: onCommit)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        context.coordinator.start()
+        return NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.onCommit = onCommit
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    final class Coordinator {
+        var onCommit: () -> Void
+        private var monitor: Any?
+
+        init(onCommit: @escaping () -> Void) {
+            self.onCommit = onCommit
+        }
+
+        func start() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                let isReturn = event.keyCode == 36 || event.keyCode == 76
+                guard isReturn, !event.modifierFlags.contains(.command) else { return event }
+                self?.onCommit()
+                return nil
+            }
+        }
+
+        func stop() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
+            monitor = nil
+        }
+    }
+}
+
 private struct NewCueSheet: View {
     @Binding var draft: String
     let onCancel: () -> Void
@@ -636,6 +753,7 @@ private struct NewCueSheet: View {
         .background(DreamCueStyle.canvas)
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
+        .background(ReturnCommitHandler(onCommit: onSave))
     }
 }
 
@@ -693,6 +811,7 @@ private struct CueDetailSheet: View {
         .background(DreamCueStyle.canvas)
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .shadow(color: .black.opacity(0.22), radius: 24, y: 12)
+        .background(ReturnCommitHandler(onCommit: onSave))
     }
 }
 
@@ -985,13 +1104,15 @@ private struct CueRow: View {
     let displayNumber: Int
     let index: Int
     let rowCount: Int
+    let avoidanceOffset: CGFloat
     let onOpen: (Memo) -> Void
+    let onDragPreviewChange: (Int?) -> Void
     let onMove: (Int, Int) -> Void
-    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var dragTranslation: CGFloat = 0
     @State private var isDragging = false
 
     private var dragPresentation: CueDragPresentation {
-        CueDragPresentation(translationY: dragTranslation, isDragging: isDragging || dragTranslation != 0)
+        CueDragPresentation(translationY: dragTranslation, isDragging: isDragging)
     }
 
     var body: some View {
@@ -1029,14 +1150,14 @@ private struct CueRow: View {
                     .foregroundStyle(DreamCueStyle.muted)
             }
             .padding(14)
-            .background(memo.pinned ? DreamCueStyle.border.opacity(0.28) : DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 10))
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(DreamCueStyle.border, lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(memo.content)
         .accessibilityValue("#\(String(format: "%02d", displayNumber))")
-        .offset(y: dragPresentation.offsetY)
+        .offset(y: dragPresentation.offsetY + avoidanceOffset)
         .scaleEffect(dragPresentation.scale)
         .zIndex(isDragging ? 1 : 0)
         .shadow(
@@ -1045,27 +1166,62 @@ private struct CueRow: View {
             y: dragPresentation.shadowOffsetY
         )
         .animation(.spring(response: 0.2, dampingFraction: 0.82), value: isDragging)
-        .highPriorityGesture(
-            DragGesture(minimumDistance: 8)
-                .updating($dragTranslation) { value, state, _ in
-                    state = value.translation.height
-                }
+        .animation(.spring(response: 0.2, dampingFraction: 0.82), value: avoidanceOffset)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5)
+                .sequenced(before: DragGesture(minimumDistance: 0))
                 .onChanged { value in
-                    isDragging = true
+                    handleLongPressDragChange(value)
                 }
                 .onEnded { value in
-                    let target = CueDragPresentation.targetIndex(
-                        index: index,
-                        rowCount: rowCount,
-                        translationY: value.translation.height
-                    )
+                    let target = longPressDragTarget(value)
+                    let canMove = isDragging
                     withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
                         isDragging = false
+                        dragTranslation = 0
                     }
-                    if target != index {
+                    onDragPreviewChange(nil)
+                    if canMove, target != index {
                         onMove(index, target)
                     }
                 }
+        )
+    }
+
+    private var rowBackground: Color {
+        if isDragging {
+            return DreamCueStyle.selected
+        }
+        return memo.pinned ? DreamCueStyle.border.opacity(0.28) : DreamCueStyle.panel
+    }
+
+    private func handleLongPressDragChange(
+        _ value: SequenceGesture<LongPressGesture, DragGesture>.Value
+    ) {
+        switch value {
+        case .first(true):
+            isDragging = true
+            dragTranslation = 0
+            onDragPreviewChange(index)
+        case .second(true, let dragValue):
+            isDragging = true
+            dragTranslation = dragValue?.translation.height ?? 0
+            onDragPreviewChange(longPressDragTarget(value))
+        default:
+            break
+        }
+    }
+
+    private func longPressDragTarget(
+        _ value: SequenceGesture<LongPressGesture, DragGesture>.Value
+    ) -> Int {
+        guard case .second(true, let dragValue) = value else {
+            return index
+        }
+        return CueDragPresentation.targetIndex(
+            index: index,
+            rowCount: rowCount,
+            translationY: dragValue?.translation.height ?? 0
         )
     }
 }

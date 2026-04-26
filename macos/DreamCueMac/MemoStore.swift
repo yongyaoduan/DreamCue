@@ -192,6 +192,10 @@ final class MemoStore: ObservableObject {
             syncStatus = "Enter an email and password."
             return
         }
+        if let blockedMessage = syncCreateAccountBlockedMessage(enteredEmail: email, signedInEmail: signedInEmail) {
+            syncStatus = blockedMessage
+            return
+        }
 
         Task {
             do {

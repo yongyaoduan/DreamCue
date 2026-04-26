@@ -20,11 +20,21 @@ final class FirebaseRestSyncService {
     }
 
     func signIn(email: String, password: String) async throws {
-        session = try await authenticate(endpoint: "accounts:signInWithPassword", email: email, password: password)
+        session = try await authenticate(
+            endpoint: "accounts:signInWithPassword",
+            email: email,
+            password: password,
+            fallback: "Sync sign-in failed."
+        )
     }
 
     func createAccount(email: String, password: String) async throws {
-        session = try await authenticate(endpoint: "accounts:signUp", email: email, password: password)
+        session = try await authenticate(
+            endpoint: "accounts:signUp",
+            email: email,
+            password: password,
+            fallback: "Sync account creation failed."
+        )
     }
 
     func signOut() {
@@ -62,7 +72,7 @@ final class FirebaseRestSyncService {
         }
     }
 
-    private func authenticate(endpoint: String, email: String, password: String) async throws -> Session {
+    private func authenticate(endpoint: String, email: String, password: String, fallback: String) async throws -> Session {
         guard !apiKey.isEmpty else {
             throw SyncError.missingFirebaseConfig
         }
@@ -79,13 +89,13 @@ final class FirebaseRestSyncService {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
-            throw SyncError.authenticationFailed
+            throw SyncError.authenticationFailed(firebaseAuthFailureMessage(data: data, fallback: fallback))
         }
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let userId = root["localId"] as? String,
               let idToken = root["idToken"] as? String
         else {
-            throw SyncError.authenticationFailed
+            throw SyncError.authenticationFailed(fallback)
         }
         return Session(userId: userId, idToken: idToken)
     }
@@ -149,16 +159,49 @@ final class FirebaseRestSyncService {
 
 private enum SyncError: LocalizedError {
     case missingFirebaseConfig
-    case authenticationFailed
+    case authenticationFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .missingFirebaseConfig:
             "Firebase sync is not configured."
-        case .authenticationFailed:
-            "Sync authentication failed."
+        case .authenticationFailed(let message):
+            message
         }
     }
+}
+
+func syncCreateAccountBlockedMessage(enteredEmail: String, signedInEmail: String) -> String? {
+    let entered = enteredEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    let signedIn = signedInEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !entered.isEmpty, !signedIn.isEmpty, entered.compare(signedIn, options: [.caseInsensitive]) == .orderedSame {
+        return "An account already exists for this email."
+    }
+    return nil
+}
+
+func firebaseAuthFailureMessage(data: Data, fallback: String) -> String {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let error = root["error"] as? [String: Any],
+          let message = error["message"] as? String
+    else {
+        return fallback
+    }
+    if message.contains("EMAIL_EXISTS") || message.localizedCaseInsensitiveContains("already in use") {
+        return "An account already exists for this email."
+    }
+    if message.contains("INVALID_EMAIL") {
+        return "Enter a valid email address."
+    }
+    if message.contains("WEAK_PASSWORD") {
+        return "Use a password with at least 6 characters."
+    }
+    if message.contains("INVALID_LOGIN_CREDENTIALS") ||
+        message.contains("INVALID_PASSWORD") ||
+        message.contains("EMAIL_NOT_FOUND") {
+        return "Email or password is incorrect."
+    }
+    return fallback
 }
 
 private func intField(_ value: Any?) -> Int64? {

@@ -8,6 +8,7 @@ import app.dreamcue.model.Memo
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
@@ -125,7 +126,12 @@ class FirebaseSyncCoordinator(
             onStatus("Firebase sync is not configured.")
             return
         }
-        auth.createUserWithEmailAndPassword(email.trim(), password)
+        val trimmedEmail = email.trim()
+        if (auth.currentUser?.email?.trim().equals(trimmedEmail, ignoreCase = true)) {
+            onStatus("An account already exists for this email.")
+            return
+        }
+        auth.createUserWithEmailAndPassword(trimmedEmail, password)
             .addOnSuccessListener {
                 onStatus("Sync account created.")
                 start(onStatus, onRemoteChange)
@@ -236,7 +242,9 @@ internal fun firebaseSyncFailureMessage(error: Throwable, fallback: String): Str
     return when {
         rawMessage.contains("CONFIGURATION_NOT_FOUND") ->
             "Sync account setup is not available yet."
-        rawMessage.contains("EMAIL_EXISTS") ->
+        error is FirebaseAuthUserCollisionException ||
+            rawMessage.contains("EMAIL_EXISTS") ||
+            rawMessage.contains("already in use", ignoreCase = true) ->
             "An account already exists for this email."
         rawMessage.contains("INVALID_EMAIL") ->
             "Enter a valid email address."

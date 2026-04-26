@@ -140,10 +140,14 @@ class DreamCueViewModel(
     }
 
     fun createSyncAccount() {
-        val email = uiState.syncEmail
+        val email = uiState.syncEmail.trim()
         val password = uiState.syncPassword
         if (email.isBlank() || password.isBlank()) {
             uiState = uiState.copy(syncStatus = "Enter an email and password.")
+            return
+        }
+        if (syncCoordinator.currentEmail().trim().equals(email, ignoreCase = true)) {
+            uiState = uiState.copy(syncStatus = "An account already exists for this email.")
             return
         }
 

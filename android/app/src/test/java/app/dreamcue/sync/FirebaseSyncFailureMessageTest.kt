@@ -21,6 +21,13 @@ class FirebaseSyncFailureMessageTest {
             firebaseSyncFailureMessage(RuntimeException("[ EMAIL_EXISTS ]"), "Sync account creation failed."),
         )
         assertEquals(
+            "An account already exists for this email.",
+            firebaseSyncFailureMessage(
+                RuntimeException("The email address is already in use by another account."),
+                "Sync account creation failed.",
+            ),
+        )
+        assertEquals(
             "Email or password is incorrect.",
             firebaseSyncFailureMessage(RuntimeException("[ INVALID_LOGIN_CREDENTIALS ]"), "Sync sign-in failed."),
         )

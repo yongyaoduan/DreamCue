@@ -21,6 +21,33 @@ enum CueDragPresentationTests {
             CueDragPresentation.targetIndex(index: 2, rowCount: 3, translationY: -160) == 0,
             "Upward drag must target a higher row."
         )
+        check(
+            CueDragPresentation.displacedOffset(
+                rowIndex: 1,
+                sourceIndex: 0,
+                targetIndex: 2,
+                rowHeight: 78
+            ) == -78,
+            "Rows between a downward drag source and target must move up before release."
+        )
+        check(
+            CueDragPresentation.displacedOffset(
+                rowIndex: 1,
+                sourceIndex: 2,
+                targetIndex: 0,
+                rowHeight: 78
+            ) == 78,
+            "Rows between an upward drag source and target must move down before release."
+        )
+        check(
+            CueDragPresentation.displacedOffset(
+                rowIndex: 0,
+                sourceIndex: 0,
+                targetIndex: 2,
+                rowHeight: 78
+            ) == 0,
+            "The dragged row itself must not receive an avoidance offset."
+        )
     }
 
     private static func check(_ condition: @autoclosure () -> Bool, _ message: String) {

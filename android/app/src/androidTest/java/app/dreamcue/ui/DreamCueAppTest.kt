@@ -247,8 +247,6 @@ class DreamCueAppTest {
         cue.performTouchInput {
             down(center)
             advanceEventTime(700)
-        }
-        cue.performTouchInput {
             moveBy(Offset(0f, 140f))
         }
         composeRule.waitForIdle()
@@ -260,6 +258,124 @@ class DreamCueAppTest {
         cue.performTouchInput {
             up()
         }
+    }
+
+    @Test
+    fun draggingTodayCueDisplacesOtherRowsBeforeReleaseWithoutCommittingOrder() {
+        var reordered: Pair<Int, Int>? = null
+        var state by mutableStateOf(
+            MainUiState(
+                currentMemos = listOf(activeMemo, secondActiveMemo, thirdActiveMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+                onReorderCurrentMemos = { from, to ->
+                    reordered = from to to
+                    val current = state.currentMemos.toMutableList()
+                    val moved = current.removeAt(from)
+                    current.add(to, moved)
+                    state = state.copy(currentMemos = current)
+                },
+            )
+        }
+
+        val cue = composeRule.onNodeWithTag("currentCue.${activeMemo.id}")
+        cue.performTouchInput {
+            down(center)
+            advanceEventTime(700)
+            moveBy(Offset(0f, 190f))
+        }
+        composeRule.waitForIdle()
+
+        assert(reordered == null)
+        val secondAvoidanceOffset = composeRule
+            .onNodeWithTag("currentCue.${secondActiveMemo.id}")
+            .fetchSemanticsNode()
+            .config[CueAvoidanceOffsetYKey]
+        assert(secondAvoidanceOffset < -40f)
+        composeRule.onNodeWithTag("currentCueNumber.${activeMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
+        composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
+        composeRule.onNodeWithTag("currentCueNumber.${thirdActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#03")
+
+        cue.performTouchInput {
+            up()
+        }
+        composeRule.waitForIdle()
+        assert(reordered == (0 to 2))
+    }
+
+    @Test
+    fun immediateSwipeOnTodayCueDoesNotStartDragReorder() {
+        var reordered: Pair<Int, Int>? = null
+        var state by mutableStateOf(
+            MainUiState(
+                currentMemos = listOf(activeMemo, secondActiveMemo, thirdActiveMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+                onReorderCurrentMemos = { from, to ->
+                    reordered = from to to
+                },
+            )
+        }
+
+        composeRule.onNodeWithTag("currentCue.${activeMemo.id}")
+            .performTouchInput {
+                down(center)
+                advanceEventTime(120)
+                moveBy(Offset(0f, 190f))
+                up()
+            }
+        composeRule.waitForIdle()
+
+        assert(reordered == null)
+        composeRule.onNodeWithTag("currentCueNumber.${activeMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
+        composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
+        composeRule.onNodeWithTag("currentCueNumber.${thirdActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#03")
     }
 
     @Test
@@ -804,6 +920,58 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Save Time").performClick()
 
         assert(savedTime != null && savedTime != ReminderTime(hour = 21, minute = 0))
+    }
+
+    @Test
+    fun reminderTimeWheelFollowsFingerBeforeRelease() {
+        var state by mutableStateOf(MainUiState(selectedScreen = MemoScreen.REMINDER))
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { hour, minute ->
+                    state = state.copy(reminderTime = ReminderTime(hour, minute))
+                },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = { state = state.copy(reminderEnabled = it) },
+            )
+        }
+
+        composeRule.onNodeWithText("Change Time").performClick()
+        composeRule.onNodeWithText("Choose Reminder Time").assertIsDisplayed()
+        composeRule.waitForIdle()
+        val hourPicker = composeRule.onNodeWithContentDescription("Hour picker")
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.waitForIdle()
+        device.swipe(
+            (device.displayWidth * 0.28f).roundToInt(),
+            (device.displayHeight * 0.86f).roundToInt(),
+            (device.displayWidth * 0.28f).roundToInt(),
+            (device.displayHeight * 0.68f).roundToInt(),
+            36,
+        )
+        composeRule.waitUntil {
+            hourPicker.fetchSemanticsNode().config[TimeWheelSelectedValueKey] != 21
+        }
+
+        val node = hourPicker.fetchSemanticsNode()
+        assert(node.config[TimeWheelSelectedValueKey] != 21)
     }
 
     @Test

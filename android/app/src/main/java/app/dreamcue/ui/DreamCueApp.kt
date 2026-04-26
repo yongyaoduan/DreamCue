@@ -8,10 +8,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.rememberScrollableState
-import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -125,6 +125,7 @@ private val Porcelain = Color(0xFFFFFCF6)
 private val Stone = Color(0xFFE9E3D8)
 private val Forest = Color(0xFF0F4B3A)
 private val ForestSoft = Color(0xFFE0EEE8)
+private val ForestPale = Color(0xFFD3E9DF)
 private val Brass = Color(0xFFC9A46A)
 private val Clay = Color(0xFFC4614B)
 private val Line = Color(0xFFD9D1C4)
@@ -132,6 +133,12 @@ private val DeepForest = Color(0xFF0F3D2E)
 private val ScreenPadding = PaddingValues(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 18.dp)
 val CueDragOffsetYKey = SemanticsPropertyKey<Float>("CueDragOffsetY")
 var SemanticsPropertyReceiver.cueDragOffsetY by CueDragOffsetYKey
+val CueAvoidanceOffsetYKey = SemanticsPropertyKey<Float>("CueAvoidanceOffsetY")
+var SemanticsPropertyReceiver.cueAvoidanceOffsetY by CueAvoidanceOffsetYKey
+val TimeWheelDragOffsetYKey = SemanticsPropertyKey<Float>("TimeWheelDragOffsetY")
+var SemanticsPropertyReceiver.timeWheelDragOffsetY by TimeWheelDragOffsetYKey
+val TimeWheelSelectedValueKey = SemanticsPropertyKey<Int>("TimeWheelSelectedValue")
+var SemanticsPropertyReceiver.timeWheelSelectedValue by TimeWheelSelectedValueKey
 
 private val DreamCueColorScheme = lightColorScheme(
     primary = Forest,
@@ -310,6 +317,8 @@ private fun TodayScreen(
     onOpenMemo: (Memo) -> Unit,
     onReorderCurrentMemos: (Int, Int) -> Unit,
 ) {
+    var dragPreview by remember { mutableStateOf<CueDragPreview?>(null) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize(),
@@ -368,6 +377,13 @@ private fun TodayScreen(
                 items = state.currentMemos,
                 key = { _, memo -> "today-${memo.id}" },
             ) { index, memo ->
+                val avoidanceOffset = dragPreview?.let {
+                    cueDragDisplacedOffset(
+                        rowIndex = index,
+                        sourceIndex = it.sourceIndex,
+                        targetIndex = it.targetIndex,
+                    )
+                } ?: 0f
                 ReorderableCueCard(
                     memo = memo,
                     displayNumber = index + 1,
@@ -376,6 +392,12 @@ private fun TodayScreen(
                     onOpen = { onOpenMemo(memo) },
                     index = index,
                     count = state.currentMemos.size,
+                    avoidanceOffset = avoidanceOffset,
+                    onDragTargetChange = { targetIndex ->
+                        dragPreview = targetIndex?.let {
+                            CueDragPreview(sourceIndex = index, targetIndex = it)
+                        }
+                    },
                     onMove = onReorderCurrentMemos,
                 )
             }
@@ -687,14 +709,14 @@ private fun DreamCueNavigation(
     onSelectScreen: (MemoScreen) -> Unit,
 ) {
     Surface(
-        color = Porcelain.copy(alpha = 0.96f),
-        shadowElevation = 12.dp,
+        color = Porcelain,
+        shadowElevation = 16.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -717,13 +739,13 @@ private fun NavItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val color = if (selected) Forest else InkSoft
+    val color = if (selected) Forest else InkSoft.copy(alpha = 0.9f)
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .background(if (selected) ForestSoft else Color.Transparent)
-            .padding(vertical = 7.dp),
+            .background(if (selected) ForestPale else Color.Transparent)
+            .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
@@ -731,14 +753,14 @@ private fun NavItem(
             imageVector = screen.icon(),
             contentDescription = screen.navLabel(),
             tint = color,
-            modifier = Modifier.size(19.dp),
+            modifier = Modifier.size(21.dp),
         )
         Text(
             text = screen.navLabel(),
             color = color,
-            fontSize = 10.sp,
-            lineHeight = 11.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            fontSize = 11.sp,
+            lineHeight = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Bold,
             maxLines = 1,
         )
     }
@@ -1063,10 +1085,11 @@ private fun CueCard(
     accent: Color,
     onOpen: () -> Unit,
     numberTag: String? = null,
+    isDragging: Boolean = false,
 ) {
     ElevatedPanel(
         modifier = Modifier.clickable(onClick = onOpen),
-        color = if (memo.pinned) Stone.copy(alpha = 0.42f) else Porcelain,
+        color = if (isDragging) ForestSoft else if (memo.pinned) Stone.copy(alpha = 0.42f) else Porcelain,
         contentPadding = PaddingValues(15.dp),
     ) {
         Row(
@@ -1136,10 +1159,13 @@ private fun ReorderableCueCard(
     onOpen: () -> Unit,
     index: Int,
     count: Int,
+    avoidanceOffset: Float,
+    onDragTargetChange: (Int?) -> Unit,
     onMove: (Int, Int) -> Unit,
 ) {
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
+    val rowStepPx = 88f
     val visibleDragOffset by animateFloatAsState(
         targetValue = if (isDragging) dragOffset else 0f,
         animationSpec = spring(stiffness = 700f, dampingRatio = 0.82f),
@@ -1156,27 +1182,35 @@ private fun ReorderableCueCard(
             .testTag("currentCue.${memo.id}")
             .zIndex(if (isDragging) 1f else 0f)
             .graphicsLayer {
-                translationY = visibleDragOffset
+                translationY = visibleDragOffset + avoidanceOffset
                 scaleX = 1f + dragLift * 0.012f
                 scaleY = 1f + dragLift * 0.012f
                 shadowElevation = dragLift * 18f
             }
-            .semantics { cueDragOffsetY = visibleDragOffset }
+            .semantics {
+                cueDragOffsetY = visibleDragOffset
+                cueAvoidanceOffsetY = avoidanceOffset
+            }
             .pointerInput(index, count) {
-                detectDragGestures(
+                detectDragGesturesAfterLongPress(
                     onDragStart = {
                         isDragging = true
                         dragOffset = 0f
+                        onDragTargetChange(index)
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         dragOffset += dragAmount.y
+                        val rowStep = (dragOffset / rowStepPx).roundToInt()
+                        val target = (index + rowStep).coerceIn(0, count - 1)
+                        onDragTargetChange(target)
                     },
                     onDragEnd = {
-                        val rowStep = (dragOffset / 88f).roundToInt()
+                        val rowStep = (dragOffset / rowStepPx).roundToInt()
                         val target = (index + rowStep).coerceIn(0, count - 1)
                         isDragging = false
                         dragOffset = 0f
+                        onDragTargetChange(null)
                         if (target != index) {
                             onMove(index, target)
                         }
@@ -1184,6 +1218,7 @@ private fun ReorderableCueCard(
                     onDragCancel = {
                         isDragging = false
                         dragOffset = 0f
+                        onDragTargetChange(null)
                     },
                 )
             },
@@ -1195,8 +1230,29 @@ private fun ReorderableCueCard(
             accent = accent,
             onOpen = onOpen,
             numberTag = "currentCueNumber.${memo.id}",
+            isDragging = isDragging,
         )
     }
+}
+
+private data class CueDragPreview(
+    val sourceIndex: Int,
+    val targetIndex: Int,
+)
+
+private fun cueDragDisplacedOffset(
+    rowIndex: Int,
+    sourceIndex: Int,
+    targetIndex: Int,
+    rowHeight: Float = 88f,
+): Float {
+    if (sourceIndex < targetIndex && rowIndex > sourceIndex && rowIndex <= targetIndex) {
+        return -rowHeight
+    }
+    if (sourceIndex > targetIndex && rowIndex >= targetIndex && rowIndex < sourceIndex) {
+        return rowHeight
+    }
+    return 0f
 }
 
 @Composable
@@ -1659,22 +1715,26 @@ private fun WheelColumn(
     modifier: Modifier = Modifier,
 ) {
     val selectedState by rememberUpdatedState(selected)
-    var dragRemainderPx by remember { mutableFloatStateOf(0f) }
+    var dragOffsetPx by remember { mutableFloatStateOf(0f) }
     val stepPx = with(LocalDensity.current) { 38.dp.toPx() }
     val selectedIndex = values.indexOf(selected).coerceAtLeast(0)
     val visibleValues = (-2..2).mapNotNull { offset -> values.getOrNull(selectedIndex + offset) }
-    val scrollableState = rememberScrollableState { delta ->
-        dragRemainderPx -= delta
-        val steps = (dragRemainderPx / stepPx).toInt()
+    fun applyDrag(deltaY: Float) {
+        dragOffsetPx += deltaY
+        val steps = (-dragOffsetPx / stepPx).toInt()
         if (steps != 0) {
             val currentIndex = values.indexOf(selectedState).coerceAtLeast(0)
             val targetIndex = (currentIndex + steps).coerceIn(0, values.lastIndex)
             if (targetIndex != currentIndex) {
                 values.getOrNull(targetIndex)?.let(onSelect)
+                dragOffsetPx += steps * stepPx
+            } else {
+                dragOffsetPx = 0f
             }
-            dragRemainderPx -= steps * stepPx
         }
-        delta
+    }
+    val dragState = rememberDraggableState { deltaY ->
+        applyDrag(deltaY)
     }
 
     Column(
@@ -1683,32 +1743,44 @@ private fun WheelColumn(
             .clip(RoundedCornerShape(24.dp))
             .background(Color(0xFFF1EADF))
             .border(1.dp, Line, RoundedCornerShape(24.dp))
-            .scrollable(
-                state = scrollableState,
+            .draggable(
+                state = dragState,
                 orientation = Orientation.Vertical,
+                onDragStopped = {
+                    dragOffsetPx = 0f
+                },
             )
             .semantics {
                 this.contentDescription = contentDescription
+                this.timeWheelDragOffsetY = dragOffsetPx
+                this.timeWheelSelectedValue = selected
             },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        visibleValues.forEach { value ->
-            val isSelected = value == selected
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .background(if (isSelected) Stone else Color.Transparent),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label(value),
-                    color = if (isSelected) Ink else InkSoft.copy(alpha = 0.78f),
-                    fontSize = if (isSelected) 34.sp else 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = if (isSelected) 40.sp else 22.sp,
-                )
+        Column(
+            modifier = Modifier.graphicsLayer {
+                translationY = dragOffsetPx
+            },
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            visibleValues.forEach { value ->
+                val isSelected = value == selected
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(if (isSelected) Stone else Color.Transparent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = label(value),
+                        color = if (isSelected) Ink else InkSoft.copy(alpha = 0.78f),
+                        fontSize = if (isSelected) 34.sp else 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = if (isSelected) 40.sp else 22.sp,
+                    )
+                }
             }
         }
     }

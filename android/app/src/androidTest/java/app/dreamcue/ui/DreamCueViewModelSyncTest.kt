@@ -73,6 +73,24 @@ class DreamCueViewModelSyncTest {
         repository.dispose()
     }
 
+    @Test
+    fun createAccountWithCurrentEmailShowsExistingAccountStatus() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.filesDir, "dreamcue.sqlite3").delete()
+        val repository = DreamCueRepository(context)
+        val syncCoordinator = RecordingSyncCoordinator(currentEmail = "owner@example.com")
+        val viewModel = DreamCueViewModel(repository, syncCoordinator)
+
+        waitUntil { !viewModel.uiState.isLoading && viewModel.uiState.nativeReady }
+        viewModel.updateSyncEmail(" Owner@Example.com ")
+        viewModel.updateSyncPassword("password123")
+        viewModel.createSyncAccount()
+
+        assertTrue(syncCoordinator.createdAccounts.isEmpty())
+        assertTrue(viewModel.uiState.syncStatus == "An account already exists for this email.")
+        repository.dispose()
+    }
+
     private fun waitUntil(timeoutMs: Long = 5_000L, condition: () -> Boolean) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
@@ -85,10 +103,13 @@ class DreamCueViewModelSyncTest {
     }
 }
 
-private class RecordingSyncCoordinator : MemoSyncCoordinator {
+private class RecordingSyncCoordinator(
+    private val currentEmail: String = "",
+) : MemoSyncCoordinator {
     val uploadedMemos = mutableListOf<Memo>()
+    val createdAccounts = mutableListOf<Pair<String, String>>()
 
-    override fun currentEmail(): String = ""
+    override fun currentEmail(): String = currentEmail
 
     override fun start(
         onStatus: (String) -> Unit,
@@ -107,7 +128,9 @@ private class RecordingSyncCoordinator : MemoSyncCoordinator {
         password: String,
         onStatus: (String) -> Unit,
         onRemoteChange: () -> Unit,
-    ) = Unit
+    ) {
+        createdAccounts += email to password
+    }
 
     override fun signOut(onStatus: (String) -> Unit) = Unit
 

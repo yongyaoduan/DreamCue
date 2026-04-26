@@ -55,6 +55,25 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     @objc
+    func testNavigationDismissesOpenModalBeforeChangingSurface() {
+        let app = launchIsolatedApp()
+
+        XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
+        app.buttons["Rhythm"].firstMatch.click()
+        app.buttons["Change Time"].click()
+        XCTAssertTrue(app.staticTexts["Select reminder time"].waitForExistence(timeout: 5))
+
+        app.buttons["Account"].firstMatch.click()
+        XCTAssertFalse(app.staticTexts["Select reminder time"].exists)
+        XCTAssertTrue(app.staticTexts["Sync Account"].waitForExistence(timeout: 5))
+
+        app.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Select reminder time"].exists)
+        attachScreenshot("mac-modal-navigation-redesign", app: app)
+    }
+
+    @objc
     func testCueEditorUsesIconActionsAndReminderPicker() {
         let app = launchIsolatedApp()
         let cueText = "mac_design_\(UUID().uuidString.prefix(8))"
@@ -69,9 +88,10 @@ final class DreamCueMacUITests: XCTestCase {
         app.typeKey(.return, modifierFlags: .command)
         XCTAssertTrue(app.staticTexts["New Cue"].exists)
         app.typeKey(.return, modifierFlags: [])
+        dismissSystemSettingsIfOpen(app: app)
 
         XCTAssertTrue(app.buttons[cueText].waitForExistence(timeout: 5))
-        app.buttons[cueText].click()
+        app.buttons[cueText].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(app.staticTexts[cueText].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Favorite"].exists)
         XCTAssertFalse(app.buttons["More"].exists)
@@ -162,6 +182,28 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertEqual(app.buttons[secondCue].value as? String, "#01")
         XCTAssertEqual(app.buttons[firstCue].value as? String, "#02")
         XCTAssertEqual(app.buttons[thirdCue].value as? String, "#03")
+    }
+
+    @objc
+    func testImmediateCueSwipeDoesNotReorderWithoutLongPress() {
+        let app = launchIsolatedApp()
+        let firstCue = "first_swipe_\(UUID().uuidString.prefix(6))"
+        let secondCue = "second_swipe_\(UUID().uuidString.prefix(6))"
+        let thirdCue = "third_swipe_\(UUID().uuidString.prefix(6))"
+
+        XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
+        createCue(firstCue, app: app)
+        createCue(secondCue, app: app)
+        createCue(thirdCue, app: app)
+
+        XCTAssertEqual(app.buttons[thirdCue].value as? String, "#01")
+        XCTAssertEqual(app.buttons[secondCue].value as? String, "#02")
+        XCTAssertEqual(app.buttons[firstCue].value as? String, "#03")
+        app.buttons[thirdCue].press(forDuration: 0.1, thenDragTo: app.buttons[firstCue])
+
+        XCTAssertEqual(app.buttons[thirdCue].value as? String, "#01")
+        XCTAssertEqual(app.buttons[secondCue].value as? String, "#02")
+        XCTAssertEqual(app.buttons[firstCue].value as? String, "#03")
     }
 
     @objc
@@ -353,6 +395,12 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertTrue(editor.isHittable)
         editor.click()
+    }
+
+    private func dismissSystemSettingsIfOpen(app: XCUIApplication) {
+        NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences")
+            .forEach { $0.forceTerminate() }
+        app.activate()
     }
 
     private func clickTrailingSideOf(_ element: XCUIElement) {

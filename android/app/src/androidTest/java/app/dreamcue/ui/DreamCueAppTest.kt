@@ -140,8 +140,8 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Password").assertIsDisplayed()
         composeRule.onNodeWithText("Create").assertIsDisplayed()
         composeRule.onNodeWithText("Sign In").assertIsDisplayed()
-        composeRule.onNodeWithText("Tenant-scoped privacy").assertIsDisplayed()
-        composeRule.onNodeWithText("Cue sync stays private to the signed-in account.")
+        composeRule.onNodeWithText("Private sync").assertIsDisplayed()
+        composeRule.onNodeWithText("Only your signed-in account can access synced cues.")
             .assertIsDisplayed()
         assert(composeRule.onAllNodesWithText("users/{uid}/memos").fetchSemanticsNodes().isEmpty())
     }
@@ -305,7 +305,7 @@ class DreamCueAppTest {
         cue.performTouchInput {
             down(center)
             advanceEventTime(700)
-            moveBy(Offset(0f, 190f))
+            moveBy(Offset(0f, 280f))
         }
         composeRule.waitForIdle()
 
@@ -318,6 +318,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithTag("currentCueNumber.${activeMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
         composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
         composeRule.onNodeWithTag("currentCueNumber.${thirdActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#03")
+        takeDeviceScreenshotIfRequested()
 
         cue.performTouchInput {
             up()
@@ -376,6 +377,101 @@ class DreamCueAppTest {
         composeRule.onNodeWithTag("currentCueNumber.${activeMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
         composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
         composeRule.onNodeWithTag("currentCueNumber.${thirdActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#03")
+    }
+
+    @Test
+    fun draggingTodayCueDoesNotOpenDetailOnRelease() {
+        var openedMemo: Memo? = null
+        var reordered: Pair<Int, Int>? = null
+        var state by mutableStateOf(
+            MainUiState(
+                currentMemos = listOf(activeMemo, secondActiveMemo, thirdActiveMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {
+                    openedMemo = it
+                    state = state.copy(selectedMemo = it, detailDraft = it.content)
+                },
+                onDismissMemoDetail = { state = state.copy(selectedMemo = null, detailDraft = "") },
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+                onReorderCurrentMemos = { from, to ->
+                    reordered = from to to
+                },
+            )
+        }
+
+        composeRule.onNodeWithTag("currentCue.${activeMemo.id}")
+            .performTouchInput {
+                down(center)
+                advanceEventTime(700)
+                moveBy(Offset(0f, 190f))
+                up()
+            }
+        composeRule.waitForIdle()
+
+        assert(reordered != null)
+        assert(openedMemo == null)
+        assert(composeRule.onAllNodesWithText("Active Cue").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun pinnedTodayCueUsesSubtleRowTreatment() {
+        val pinnedMemo = activeMemo.copy(pinned = true)
+        var state by mutableStateOf(
+            MainUiState(
+                currentMemos = listOf(pinnedMemo, secondActiveMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+            )
+        }
+
+        composeRule.onNodeWithTag("currentCueNumber.${pinnedMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
+        composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
+        assert(composeRule.onAllNodesWithText("Pinned").fetchSemanticsNodes().isEmpty())
+        takeDeviceScreenshotIfRequested()
     }
 
     @Test
@@ -458,12 +554,13 @@ class DreamCueAppTest {
 
         composeRule.onNodeWithText("syncpeer1777...@example.com").assertIsDisplayed()
         composeRule.onNodeWithText("Realtime sync is active.").assertIsDisplayed()
-        composeRule.onNodeWithText("Tenant-scoped").assertIsDisplayed()
+        composeRule.onNodeWithText("Private sync").assertIsDisplayed()
         assert(composeRule.onAllNodesWithText(longEmail).fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Syncing as $longEmail.").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Remote path").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("users/{uid}/memos").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Pending uploads").fetchSemanticsNodes().isEmpty())
+        takeDeviceScreenshotIfRequested()
     }
 
     @Test
@@ -499,9 +596,9 @@ class DreamCueAppTest {
             )
         }
 
-        composeRule.onNodeWithText("Capture a cue...").performClick()
+        composeRule.onNodeWithText("Capture a cue").performClick()
         composeRule.onNodeWithText("New Cue").assertIsDisplayed()
-        composeRule.onNodeWithText("Short memo").performTextInput("Design sync with Sarah")
+        composeRule.onNodeWithText("Cue").performTextInput("Design sync with Sarah")
         composeRule.onNodeWithText("Save").performClick()
 
         assert(saved)
@@ -537,13 +634,13 @@ class DreamCueAppTest {
             )
         }
 
-        composeRule.onNodeWithText("Capture a cue...").performClick()
+        composeRule.onNodeWithText("Capture a cue").performClick()
         composeRule.onNodeWithText("New Cue").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Close").assertIsDisplayed()
-        composeRule.onNodeWithText("Short memo").assertIsDisplayed()
+        composeRule.onNodeWithText("Cue").assertIsDisplayed()
         composeRule.onNodeWithText("Private").assertIsDisplayed()
-        composeRule.onNodeWithText("Stored locally").assertIsDisplayed()
-        composeRule.onNodeWithText("300/300").assertIsDisplayed()
+        composeRule.onNodeWithText("Local first").assertIsDisplayed()
+        composeRule.onNodeWithText("300 left").assertIsDisplayed()
         assert(composeRule.onAllNodesWithText("Add details").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Cue details").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Save with context").fetchSemanticsNodes().isEmpty())
@@ -614,7 +711,7 @@ class DreamCueAppTest {
         assert(composeRule.onAllNodesWithText("More").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithText("Created").assertIsDisplayed()
         composeRule.onNodeWithText("Last updated").assertIsDisplayed()
-        composeRule.onNodeWithText("Last reminded").assertIsDisplayed()
+        assert(composeRule.onAllNodesWithText("Last reminded").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithContentDescription("Delete cue").assertIsDisplayed()
         assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithContentDescription("Restore cue").assertIsDisplayed()
@@ -758,16 +855,16 @@ class DreamCueAppTest {
         }
 
         composeRule.onNodeWithContentDescription("Delete cue").performClick()
-        composeRule.onNodeWithText("Delete this memo?").assertIsDisplayed()
-        composeRule.onNodeWithText("This cue and its event history will be permanently removed from local storage and remote sync.")
+        composeRule.onNodeWithText("Delete this cue?").assertIsDisplayed()
+        composeRule.onNodeWithText("This cue and its event history will be permanently removed.")
             .assertIsDisplayed()
         assert(composeRule.onAllNodesWithText(activeMemo.content).fetchSemanticsNodes().isNotEmpty())
         composeRule.onNodeWithText("Cancel").performClick()
-        assert(composeRule.onAllNodesWithText("Delete this memo?").fetchSemanticsNodes().isEmpty())
+        assert(composeRule.onAllNodesWithText("Delete this cue?").fetchSemanticsNodes().isEmpty())
         assert(!confirmed)
 
         composeRule.onNodeWithContentDescription("Delete cue").performClick()
-        composeRule.onNodeWithText("Delete this memo?").assertIsDisplayed()
+        composeRule.onNodeWithText("Delete this cue?").assertIsDisplayed()
         composeRule.onNodeWithText("Delete").performClick()
         assert(confirmed)
     }
@@ -813,7 +910,7 @@ class DreamCueAppTest {
     }
 
     @Test
-    fun signedInAccountShowsTenantScopedSyncElements() {
+    fun signedInAccountShowsPrivateSyncElements() {
         var signedOut = false
         val email = "qa@example.com"
         composeRule.setContent {
@@ -847,7 +944,7 @@ class DreamCueAppTest {
         }
 
         assert(composeRule.onAllNodesWithText("Private sync is active.").fetchSemanticsNodes().isEmpty())
-        composeRule.onNodeWithText("Tenant-scoped").assertIsDisplayed()
+        composeRule.onNodeWithText("Private sync").assertIsDisplayed()
         composeRule.onNodeWithText(email).assertIsDisplayed()
         composeRule.onNodeWithText("Last sync").assertIsDisplayed()
         composeRule.onNodeWithText("Cue changes stay private to this account and sync automatically.")
@@ -969,9 +1066,53 @@ class DreamCueAppTest {
         composeRule.waitUntil {
             hourPicker.fetchSemanticsNode().config[TimeWheelSelectedValueKey] != 21
         }
+        takeDeviceScreenshotIfRequested()
 
         val node = hourPicker.fetchSemanticsNode()
         assert(node.config[TimeWheelSelectedValueKey] != 21)
+    }
+
+    @Test
+    fun todayActiveDetailKeepsPinAction() {
+        var pinnedMemo: Pair<String, Boolean>? = null
+        var state by mutableStateOf(
+            MainUiState(
+                selectedScreen = MemoScreen.CURRENT,
+                currentMemos = listOf(activeMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {
+                    state = state.copy(selectedMemo = it, detailDraft = it.content)
+                },
+                onDismissMemoDetail = { state = state.copy(selectedMemo = null, detailDraft = "") },
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+                onSetMemoPinned = { memoId, pinned -> pinnedMemo = memoId to pinned },
+            )
+        }
+
+        composeRule.onNodeWithText(activeMemo.content).performClick()
+        composeRule.onNodeWithContentDescription("Pin cue").performClick()
+        assert(pinnedMemo == Pair(activeMemo.id, true))
     }
 
     @Test
@@ -1018,8 +1159,10 @@ class DreamCueAppTest {
         composeRule.onNodeWithText(activeMemo.content).assertIsDisplayed()
         composeRule.onNodeWithText(activeMemo.content).performClick()
         composeRule.onNodeWithText("Active Cue").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Pin cue").performClick()
-        assert(pinnedMemo == Pair(activeMemo.id, true))
+        assert(composeRule.onAllNodesWithContentDescription("Pin cue").fetchSemanticsNodes().isEmpty())
+        assert(composeRule.onAllNodesWithContentDescription("Unpin cue").fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithContentDescription("Complete cue").assertIsDisplayed()
+        assert(pinnedMemo == null)
 
         state = state.copy(selectedMemo = activeMemo)
         composeRule.onNodeWithContentDescription("Complete cue").performClick()
@@ -1035,9 +1178,13 @@ class DreamCueAppTest {
 
     private fun takeDeviceScreenshotIfRequested() {
         val name = InstrumentationRegistry.getArguments().getString("dreamcueScreenshotName") ?: return
+        composeRule.waitForIdle()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.waitForIdle()
+        Thread.sleep(300)
         val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
         val file = File("/sdcard/Download/$safeName.png")
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(file)
+        device.takeScreenshot(file)
     }
 
     private companion object {

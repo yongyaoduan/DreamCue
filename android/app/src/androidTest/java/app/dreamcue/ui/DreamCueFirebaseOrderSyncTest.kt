@@ -77,7 +77,7 @@ class DreamCueFirebaseOrderSyncTest {
     private fun createCue(content: String) {
         composeRule.onNodeWithContentDescription("Today").performClick()
         composeRule.onNodeWithContentDescription("New Cue").performClick()
-        composeRule.onNodeWithText("Short memo").performTextInput(content)
+        composeRule.onNodeWithText("Cue").performTextInput(content)
         composeRule.onNodeWithText("Save").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText(content).fetchSemanticsNodes().isNotEmpty()
@@ -154,9 +154,13 @@ class DreamCueFirebaseOrderSyncTest {
 
     private fun takeDeviceScreenshotIfRequested() {
         val name = argument("dreamcueScreenshotName") ?: return
+        composeRule.waitForIdle()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.waitForIdle()
+        Thread.sleep(300)
         val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
         val file = File("/sdcard/Download/$safeName.png")
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(file)
+        device.takeScreenshot(file)
     }
 
     private fun requiredArgument(name: String): String {

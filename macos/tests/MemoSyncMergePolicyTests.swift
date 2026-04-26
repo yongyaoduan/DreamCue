@@ -83,6 +83,35 @@ enum MemoSyncMergePolicyTests {
         check(mergedAfterOrderChange[0].displayOrder == remoteOrderedMemo.displayOrder, "Newer remote order must be merged even when content is older.")
         check(mergedAfterOrderChange[0].pinned, "Remote pin state must follow the newer remote order.")
 
+        var localPinnedMemo = localMemo
+        localPinnedMemo.displayOrder = 1_700_000_050_000
+        localPinnedMemo.updatedAtMs = 1_700_000_040_000
+        localPinnedMemo.pinned = true
+        let remoteUnpinnedMemo = Memo(
+            id: localPinnedMemo.id,
+            content: localPinnedMemo.content,
+            status: .active,
+            createdAtMs: localPinnedMemo.createdAtMs,
+            updatedAtMs: 1_700_000_060_000,
+            clearedAtMs: nil,
+            reminderCount: 0,
+            lastReviewedAtMs: nil,
+            displayOrder: 1_700_000_030_000,
+            pinned: false
+        )
+        let remoteUnpinRecord = RemoteMemoRecord(
+            id: remoteUnpinnedMemo.id,
+            memo: remoteUnpinnedMemo,
+            deleted: false,
+            updatedAtMs: remoteUnpinnedMemo.updatedAtMs
+        )
+        let mergedAfterRemoteUnpin = mergeRemoteRecords([remoteUnpinRecord], into: [localPinnedMemo])
+        check(!mergedAfterRemoteUnpin[0].pinned, "Newer remote unpin must clear the local pin state.")
+        check(
+            mergedAfterRemoteUnpin[0].displayOrder == localPinnedMemo.displayOrder,
+            "Remote unpin must preserve the higher local display order."
+        )
+
         let staleRemoteMemo = Memo(
             id: "memo-c",
             content: "Stale remote cue",

@@ -10,8 +10,14 @@ class ReminderNotificationPlanTest {
     fun pinnedMemosReceiveIndividualNotificationsAndSummaryCountsAllDueMemos() {
         val pinned = memo(id = "pinned", content = "Pinned cue", pinned = true)
         val regular = memo(id = "regular", content = "Regular cue", pinned = false)
+        val clearedPinned = memo(
+            id = "cleared-pinned",
+            content = "Cleared pinned cue",
+            pinned = true,
+            status = MemoStatus.CLEARED,
+        )
 
-        val plan = ReminderNotificationPlan.fromMemos(listOf(pinned, regular))
+        val plan = ReminderNotificationPlan.fromMemos(listOf(pinned, regular, clearedPinned))
 
         assertEquals(listOf(pinned), plan.individualMemos)
         assertEquals(2, plan.summaryCount)
@@ -30,14 +36,19 @@ class ReminderNotificationPlanTest {
         assertEquals("2 cues, please review.", plan.summaryText)
     }
 
-    private fun memo(id: String, content: String, pinned: Boolean): Memo {
+    private fun memo(
+        id: String,
+        content: String,
+        pinned: Boolean,
+        status: MemoStatus = MemoStatus.ACTIVE,
+    ): Memo {
         return Memo(
             id = id,
             content = content,
-            status = MemoStatus.ACTIVE,
+            status = status,
             createdAtMs = 1_000,
             updatedAtMs = 1_000,
-            clearedAtMs = null,
+            clearedAtMs = if (status == MemoStatus.CLEARED) 1_500 else null,
             reminderCount = 0,
             lastReviewedAtMs = null,
             displayOrder = 1_000,

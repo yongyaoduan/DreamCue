@@ -351,7 +351,7 @@ impl MemoService {
             } else {
                 existing.display_order
             };
-            let pinned = if remote_order_is_newer {
+            let pinned = if remote_content_is_newer || remote_order_is_newer {
                 memo.pinned
             } else {
                 existing.pinned
@@ -1001,6 +1001,35 @@ mod tests {
         );
         assert!(active[0].pinned);
         assert!(!active[1].pinned);
+    }
+
+    #[test]
+    fn remote_unpin_clears_local_pin_even_when_local_order_is_higher() {
+        let mut service = MemoService::open_in_memory().expect("service");
+        let memo = service
+            .add_memo_at("Pinned cue", ts(2026, 3, 10, 8, 0))
+            .expect("create");
+        let pinned = service
+            .set_memo_pinned_at(&memo.id, true, ts(2026, 3, 10, 10, 0))
+            .expect("pin");
+        let remote = Memo {
+            id: pinned.id.clone(),
+            content: pinned.content.clone(),
+            status: MemoStatus::Active,
+            created_at_ms: pinned.created_at_ms,
+            updated_at_ms: ts(2026, 3, 10, 11, 0),
+            cleared_at_ms: None,
+            reminder_count: pinned.reminder_count,
+            last_reviewed_at_ms: pinned.last_reviewed_at_ms,
+            display_order: ts(2026, 3, 10, 9, 0),
+            pinned: false,
+        };
+
+        let applied = service.apply_remote_memo(&remote).expect("apply");
+
+        assert!(!applied.pinned);
+        assert_eq!(applied.display_order, pinned.display_order);
+        assert!(!service.get_memo(&memo.id).expect("memo").pinned);
     }
 
     #[test]

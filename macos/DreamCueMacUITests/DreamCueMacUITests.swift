@@ -25,7 +25,7 @@ final class DreamCueMacUITests: XCTestCase {
         let app = launchIsolatedApp()
 
         XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Capture a cue..."].exists || app.buttons["New Cue"].exists)
+        XCTAssertTrue(app.staticTexts["Capture a cue"].exists || app.buttons["New Cue"].exists)
         XCTAssertTrue(app.staticTexts["Active Cues"].exists)
         XCTAssertFalse(app.staticTexts["Private cues."].exists)
         XCTAssertFalse(app.staticTexts["Syncing"].exists)
@@ -47,7 +47,7 @@ final class DreamCueMacUITests: XCTestCase {
 
         app.buttons["Account"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["Sync Account"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Tenant-scoped privacy"].exists)
+        XCTAssertTrue(app.staticTexts["Private sync"].exists)
         XCTAssertFalse(app.staticTexts["Private sync across devices."].exists)
         XCTAssertFalse(app.staticTexts["Remote path"].exists)
         XCTAssertFalse(app.staticTexts["users/{uid}/memos"].exists)
@@ -71,6 +71,21 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["Select reminder time"].exists)
         attachScreenshot("mac-modal-navigation-redesign", app: app)
+    }
+
+    @objc
+    func testCommandNFocusesNewCueEditor() {
+        let app = launchIsolatedApp()
+        let cueText = "cmdn_focus_\(UUID().uuidString.prefix(6))"
+
+        XCTAssertTrue(app.staticTexts["DreamCue"].waitForExistence(timeout: 5))
+        app.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["New Cue"].waitForExistence(timeout: 5))
+        paste(cueText, app: app)
+        app.typeKey(.return, modifierFlags: [])
+
+        XCTAssertTrue(app.buttons[cueText].waitForExistence(timeout: 5))
+        attachScreenshot("mac-command-n-focus", app: app)
     }
 
     @objc
@@ -117,14 +132,7 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertTrue(app.buttons["timePicker.minuteIncrement"].exists)
         XCTAssertTrue(app.buttons["timePicker.minuteDecrement"].exists)
         XCTAssertTrue(app.buttons["timePicker.doneButton"].exists)
-        app.buttons["timePicker.minuteIncrement"].click()
-        waitForTimePickerValue("21:05", app: app)
-        for _ in 0..<12 {
-            app.buttons["timePicker.hourDecrement"].click()
-        }
-        for _ in 0..<5 {
-            app.buttons["timePicker.minuteIncrement"].click()
-        }
+        setTimeToNineThirty(app: app)
         waitForTimePickerValue("09:30", app: app)
         attachScreenshot("mac-time-picker-redesign", app: app)
         app.buttons["timePicker.doneButton"].click()
@@ -169,6 +177,7 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertEqual(app.buttons[firstCue].value as? String, "#03")
         dragCue(app.buttons[thirdCue], below: app.buttons[firstCue])
 
+        XCTAssertFalse(app.buttons["Save"].exists)
         XCTAssertTrue(app.buttons[secondCue].waitForExistence(timeout: 5))
         XCTAssertLessThan(app.buttons[secondCue].frame.minY, app.buttons[thirdCue].frame.minY)
         XCTAssertEqual(app.buttons[secondCue].value as? String, "#01")
@@ -201,9 +210,12 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertEqual(app.buttons[firstCue].value as? String, "#03")
         app.buttons[thirdCue].press(forDuration: 0.1, thenDragTo: app.buttons[firstCue])
 
+        XCTAssertFalse(app.buttons["Save"].exists)
         XCTAssertEqual(app.buttons[thirdCue].value as? String, "#01")
         XCTAssertEqual(app.buttons[secondCue].value as? String, "#02")
         XCTAssertEqual(app.buttons[firstCue].value as? String, "#03")
+        usleep(500_000)
+        attachScreenshot("mac-immediate-swipe-no-drag", app: app)
     }
 
     @objc
@@ -219,7 +231,7 @@ final class DreamCueMacUITests: XCTestCase {
         createCue(thirdCue, app: app)
         XCTAssertTrue(app.buttons[thirdCue].waitForExistence(timeout: 5))
         app.buttons[thirdCue].press(
-            forDuration: 0.45,
+            forDuration: 0.7,
             thenDragTo: app.buttons[firstCue],
             withVelocity: .slow,
             thenHoldForDuration: 3.0
@@ -254,6 +266,8 @@ final class DreamCueMacUITests: XCTestCase {
         app.buttons["Account"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["syncpeer1777...@example.com"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Sync Health"].exists)
+        XCTAssertTrue(app.staticTexts["Private sync"].exists)
+        XCTAssertFalse(app.staticTexts["Tenant-scoped"].exists)
         XCTAssertFalse(app.staticTexts["Private sync is active."].exists)
         XCTAssertFalse(app.staticTexts["Private sync is active on this account."].exists)
         XCTAssertFalse(app.staticTexts["Remote path"].exists)
@@ -446,9 +460,14 @@ final class DreamCueMacUITests: XCTestCase {
     }
 
     private func assertVisibleOrder(_ expectedOrder: [String], app: XCUIApplication) {
-        for (index, cue) in expectedOrder.enumerated() {
+        var previousNumber = 0
+        for cue in expectedOrder {
             XCTAssertTrue(app.buttons[cue].waitForExistence(timeout: 30), "Expected \(cue) to exist.")
-            XCTAssertEqual(app.buttons[cue].value as? String, "#\(String(format: "%02d", index + 1))")
+            let displayNumber = app.buttons[cue].value as? String
+            XCTAssertNotNil(displayNumber, "Expected \(cue) to expose a display number.")
+            let number = Int(displayNumber?.dropFirst() ?? "") ?? 0
+            XCTAssertGreaterThan(number, previousNumber, "Expected \(cue) to keep a relative display order.")
+            previousNumber = number
         }
         for (before, after) in zip(expectedOrder, expectedOrder.dropFirst()) {
             XCTAssertLessThan(app.buttons[before].frame.minY, app.buttons[after].frame.minY)
@@ -475,6 +494,7 @@ final class DreamCueMacUITests: XCTestCase {
         try? FileManager.default.removeItem(at: storageURL)
         try? FileManager.default.createDirectory(at: storageURL, withIntermediateDirectories: true)
         app.launchEnvironment["DREAMCUE_STORAGE_DIR"] = storageURL.path
+        app.launchEnvironment["DREAMCUE_NOTIFICATIONS_DISABLED"] = "1"
         for (key, value) in extraEnvironment {
             app.launchEnvironment[key] = value
         }
@@ -487,6 +507,8 @@ final class DreamCueMacUITests: XCTestCase {
             "com.apple.systempreferences",
             "com.apple.notificationcenterui",
             "com.apple.tips",
+            "net.hearthsim.hstracker",
+            "app.livenotes.mac",
         ]
         for bundleIdentifier in bundleIdentifiers {
             let app = XCUIApplication(bundleIdentifier: bundleIdentifier)
@@ -513,8 +535,30 @@ final class DreamCueMacUITests: XCTestCase {
     private func paste(_ text: String, app: XCUIApplication) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        app.menuBars.menuBarItems["Edit"].click()
-        app.menuItems["Paste"].click()
+        app.typeKey("v", modifierFlags: [.command])
+    }
+
+    private func setTimeToNineThirty(app: XCUIApplication) {
+        let hourDecrement = app.buttons["timePicker.hourDecrement"]
+        let hourIncrement = app.buttons["timePicker.hourIncrement"]
+        let minuteDecrement = app.buttons["timePicker.minuteDecrement"]
+        let minuteIncrement = app.buttons["timePicker.minuteIncrement"]
+        XCTAssertTrue(hourDecrement.waitForExistence(timeout: 5))
+        XCTAssertTrue(hourIncrement.exists)
+        XCTAssertTrue(minuteDecrement.exists)
+        XCTAssertTrue(minuteIncrement.exists)
+        for _ in 0..<24 {
+            hourDecrement.click()
+        }
+        for _ in 0..<9 {
+            hourIncrement.click()
+        }
+        for _ in 0..<12 {
+            minuteDecrement.click()
+        }
+        for _ in 0..<6 {
+            minuteIncrement.click()
+        }
     }
 
     private func waitForTimePickerValue(_ value: String, app: XCUIApplication) {

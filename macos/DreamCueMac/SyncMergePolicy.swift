@@ -90,12 +90,9 @@ private func mergeRemoteRecordsIgnoringTombstones(
             }
             if remoteMemo.updatedAtMs >= merged[index].updatedAtMs {
                 let displayOrder = max(remoteMemo.displayOrder, merged[index].displayOrder)
-                let pinned = remoteMemo.displayOrder >= merged[index].displayOrder
-                    ? remoteMemo.pinned
-                    : merged[index].pinned
                 merged[index] = remoteMemo
                 merged[index].displayOrder = displayOrder
-                merged[index].pinned = pinned
+                merged[index].pinned = remoteMemo.pinned
             }
         } else {
             merged.append(remoteMemo)

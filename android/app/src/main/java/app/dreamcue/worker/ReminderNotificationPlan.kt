@@ -14,9 +14,10 @@ data class ReminderNotificationPlan(
 
     companion object {
         fun fromMemos(memos: List<Memo>): ReminderNotificationPlan {
+            val activeMemos = memos.filter { it.isActive }
             return ReminderNotificationPlan(
-                individualMemos = memos.filter { it.pinned },
-                summaryCount = memos.size,
+                individualMemos = activeMemos.filter { it.pinned },
+                summaryCount = activeMemos.size,
             )
         }
     }

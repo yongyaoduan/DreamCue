@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var isTimePickerPresented = false
     @State private var selectedHour = 21
     @State private var selectedMinute = 0
+    @State private var modalDismissGuardUntil = Date.distantPast
 
     var body: some View {
         ZStack {
@@ -42,7 +43,10 @@ struct ContentView: View {
 
             if let memo = selectedMemo {
                 ModalSurface {
-                    ModalOverlay(onDismiss: dismissDetailSavingDraft) {
+                    ModalOverlay(onDismiss: {
+                        guard Date() >= modalDismissGuardUntil else { return }
+                        dismissDetailSavingDraft()
+                    }) {
                         CueDetailSheet(
                             memo: memo,
                             draft: $detailDraft,
@@ -140,7 +144,10 @@ struct ContentView: View {
             )
         case 2:
             RhythmView(
-                dailyReminderEnabled: $store.dailyReminderEnabled,
+                dailyReminderEnabled: Binding(
+                    get: { store.dailyReminderEnabled },
+                    set: { store.setDailyReminderEnabled($0) }
+                ),
                 reminderTime: store.reminderTimeText,
                 onChangeTime: {
                     selectedHour = store.reminderHour
@@ -167,7 +174,10 @@ struct ContentView: View {
         detailDraft = memo.content
         selectedHour = store.reminderHour
         selectedMinute = store.reminderMinute
-        selectedMemo = memo
+        modalDismissGuardUntil = Date().addingTimeInterval(0.35)
+        DispatchQueue.main.async {
+            selectedMemo = memo
+        }
     }
 
     private func saveDetailAndDismiss(_ memo: Memo) {
@@ -266,7 +276,7 @@ private struct TodayView: View {
                     HStack(spacing: 16) {
                         DreamCueIcon(size: 54)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Capture a cue...")
+                            Text("Capture a cue")
                                 .font(.headline)
                             Text("Press Return to save, ⌘+N for a new cue")
                                 .font(.caption)
@@ -468,12 +478,12 @@ private struct AccountView: View {
                 InfoCard(
                     title: "Sync Health",
                     content: "Cue changes stay private to this account and sync automatically.",
-                    iconName: "checkmark"
+                    iconName: nil
                 )
             } else {
                 signInCard
                 InfoCard(
-                    title: "Tenant-scoped privacy",
+                    title: "Private sync",
                     content: "Cue sync stays private to the signed-in account.",
                     iconName: nil
                 )
@@ -513,20 +523,11 @@ private struct AccountView: View {
 
     private var signedInCard: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Text("Tenant-scoped")
-                    .font(.caption.weight(.bold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(.white.opacity(0.16), in: Capsule())
-                Spacer()
-                Image("IconRemind")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 34, height: 34)
-                    .padding(14)
-                    .background(.white.opacity(0.14), in: Circle())
-            }
+            Text("Private sync")
+                .font(.caption.weight(.bold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.white.opacity(0.16), in: Capsule())
             Text(compactAccountEmail(signedInEmail))
                     .font(.system(size: 24, weight: .bold))
                     .lineLimit(1)
@@ -583,6 +584,7 @@ private struct ModalOverlay<Content: View>: View {
 private struct CommittingTextEditor: NSViewRepresentable {
     @Binding var text: String
     let accessibilityLabel: String
+    var focusOnAppear = false
     let onCommit: () -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -619,6 +621,12 @@ private struct CommittingTextEditor: NSViewRepresentable {
         context.coordinator.update(text: $text, onCommit: onCommit)
         guard let textView = scrollView.documentView as? CommitTextView else { return }
         textView.onCommit = onCommit
+        if focusOnAppear, !context.coordinator.didFocus {
+            context.coordinator.didFocus = true
+            DispatchQueue.main.async {
+                scrollView.window?.makeFirstResponder(textView)
+            }
+        }
         let contentWidth = scrollView.contentSize.width
         if contentWidth > 0, abs(textView.frame.width - contentWidth) > 0.5 {
             textView.frame.size.width = contentWidth
@@ -634,6 +642,7 @@ private struct CommittingTextEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         private var text: Binding<String>
         private var onCommit: () -> Void
+        var didFocus = false
 
         init(text: Binding<String>, onCommit: @escaping () -> Void) {
             self.text = text
@@ -742,7 +751,7 @@ private struct NewCueSheet: View {
                     .buttonStyle(PrimaryButtonStyle())
                     .keyboardShortcut(.return, modifiers: [])
             }
-            CommittingTextEditor(text: $draft, accessibilityLabel: "Cue Text", onCommit: onSave)
+            CommittingTextEditor(text: $draft, accessibilityLabel: "Cue Text", focusOnAppear: true, onCommit: onSave)
                 .frame(maxWidth: .infinity)
                 .frame(height: 245)
                 .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
@@ -956,9 +965,9 @@ private struct TimeNumberControl: View {
                     onCommit: onCommit,
                     onTextChange: onTextChange
                 )
-                    .frame(width: 54, height: 38)
-                    .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
+                .frame(width: 54, height: 38)
+                .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(DreamCueStyle.border, lineWidth: 1))
                 Button("+", action: onIncrement)
                     .buttonStyle(TimeStepButtonStyle())
                     .accessibilityLabel(incrementIdentifier)
@@ -968,102 +977,24 @@ private struct TimeNumberControl: View {
     }
 }
 
-private struct TimeTextField: NSViewRepresentable {
+private struct TimeTextField: View {
     @Binding var text: String
     let identifier: String
     let onCommit: () -> Void
     let onTextChange: () -> Void
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onCommit: onCommit, onTextChange: onTextChange)
-    }
-
-    func makeNSView(context: Context) -> NSTextField {
-        let field = TimeEntryField(string: text)
-        field.delegate = context.coordinator
-        field.target = context.coordinator
-        field.action = #selector(Coordinator.commitAction(_:))
-        field.isBordered = false
-        field.drawsBackground = false
-        field.alignment = .center
-        field.font = NSFont.monospacedDigitSystemFont(ofSize: 17, weight: .semibold)
-        field.focusRingType = .none
-        field.usesSingleLineMode = true
-        field.lineBreakMode = .byClipping
-        field.setAccessibilityIdentifier(identifier)
-        field.setAccessibilityLabel(identifier)
-        field.setAccessibilityValue(text)
-        return field
-    }
-
-    func updateNSView(_ field: NSTextField, context: Context) {
-        context.coordinator.text = $text
-        context.coordinator.onCommit = onCommit
-        context.coordinator.onTextChange = onTextChange
-        if field.stringValue != text {
-            field.stringValue = text
-        }
-        field.setAccessibilityIdentifier(identifier)
-        field.setAccessibilityLabel(identifier)
-        field.setAccessibilityValue(text)
-    }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var text: Binding<String>
-        var onCommit: () -> Void
-        var onTextChange: () -> Void
-
-        init(text: Binding<String>, onCommit: @escaping () -> Void, onTextChange: @escaping () -> Void) {
-            self.text = text
-            self.onCommit = onCommit
-            self.onTextChange = onTextChange
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            text.wrappedValue = field.stringValue
-            field.setAccessibilityValue(field.stringValue)
-            onTextChange()
-        }
-
-        func controlTextDidEndEditing(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            text.wrappedValue = field.stringValue
-            field.setAccessibilityValue(field.stringValue)
-            onCommit()
-        }
-
-        @objc func commitAction(_ sender: NSTextField) {
-            text.wrappedValue = sender.stringValue
-            sender.setAccessibilityValue(sender.stringValue)
-            onCommit()
-        }
-
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                text.wrappedValue = textView.string
-                control.setAccessibilityValue(textView.string)
-                onCommit()
-                control.window?.makeFirstResponder(nil)
-                return true
+    var body: some View {
+        TextField("", text: $text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 17, weight: .semibold, design: .monospaced))
+            .multilineTextAlignment(.center)
+            .onChange(of: text) { _, _ in
+                onTextChange()
             }
-            return false
-        }
-    }
-}
-
-private final class TimeEntryField: NSTextField {
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-        super.mouseDown(with: event)
-    }
-
-    override func becomeFirstResponder() -> Bool {
-        let accepted = super.becomeFirstResponder()
-        if accepted {
-            currentEditor()?.selectAll(nil)
-        }
-        return accepted
+            .onSubmit(onCommit)
+            .accessibilityLabel(identifier)
+            .accessibilityIdentifier(identifier)
+            .accessibilityValue(text)
     }
 }
 
@@ -1110,6 +1041,9 @@ private struct CueRow: View {
     let onMove: (Int, Int) -> Void
     @State private var dragTranslation: CGFloat = 0
     @State private var isDragging = false
+    @State private var suppressTapAfterDrag = false
+    @State private var hasMovedAfterLongPress = false
+    @State private var dragActivationSerial = 0
 
     private var dragPresentation: CueDragPresentation {
         CueDragPresentation(translationY: dragTranslation, isDragging: isDragging)
@@ -1117,46 +1051,15 @@ private struct CueRow: View {
 
     var body: some View {
         Button {
-            onOpen(memo)
+            openIfAllowed()
         } label: {
-            HStack(spacing: 14) {
-                Text("#\(String(format: "%02d", displayNumber))")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
-                    .frame(width: 38, height: 26)
-                    .background(memo.pinned ? .white.opacity(0.62) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(memo.content)
-                        .font(.headline)
-                        .foregroundStyle(DreamCueStyle.ink)
-                        .lineLimit(1)
-                    Text(memo.isActive ? "Added \(formattedDate(memo.createdAtMs))" : "Updated \(formattedDate(memo.updatedAtMs))")
-                        .font(.caption)
-                        .foregroundStyle(DreamCueStyle.muted)
-                }
-                Spacer()
-                if memo.pinned {
-                    Image(systemName: "pin.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(DreamCueStyle.muted)
-                }
-                Text(memo.isActive ? "Current" : "Cleared")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(DreamCueStyle.selected, in: Capsule())
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(DreamCueStyle.muted)
-            }
-            .padding(14)
-            .background(rowBackground, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(DreamCueStyle.border, lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: 10))
+            rowContent
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(memo.content)
         .accessibilityValue("#\(String(format: "%02d", displayNumber))")
+        .accessibilityAction(.default, openIfAllowed)
         .offset(y: dragPresentation.offsetY + avoidanceOffset)
         .scaleEffect(dragPresentation.scale)
         .zIndex(isDragging ? 1 : 0)
@@ -1167,61 +1070,140 @@ private struct CueRow: View {
         )
         .animation(.spring(response: 0.2, dampingFraction: 0.82), value: isDragging)
         .animation(.spring(response: 0.2, dampingFraction: 0.82), value: avoidanceOffset)
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.5)
-                .sequenced(before: DragGesture(minimumDistance: 0))
-                .onChanged { value in
-                    handleLongPressDragChange(value)
-                }
-                .onEnded { value in
-                    let target = longPressDragTarget(value)
-                    let canMove = isDragging
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
-                        isDragging = false
-                        dragTranslation = 0
-                    }
-                    onDragPreviewChange(nil)
-                    if canMove, target != index {
-                        onMove(index, target)
-                    }
-                }
-        )
+        .simultaneousGesture(dragActivationGesture)
+        .simultaneousGesture(dragGesture)
+        .onDisappear(perform: resetDragState)
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 14) {
+            if memo.pinned {
+                RoundedRectangle(cornerRadius: 999)
+                    .fill(DreamCueStyle.gold.opacity(0.38))
+                    .frame(width: 3, height: 42)
+            }
+            Text("#\(String(format: "%02d", displayNumber))")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
+                .frame(width: 38, height: 26)
+                .background(memo.pinned ? DreamCueStyle.gold.opacity(0.12) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(memo.content)
+                    .font(.headline)
+                    .foregroundStyle(DreamCueStyle.ink)
+                    .lineLimit(1)
+                Text(memo.isActive ? "Added \(formattedDate(memo.createdAtMs))" : "Updated \(formattedDate(memo.updatedAtMs))")
+                    .font(.caption)
+                    .foregroundStyle(DreamCueStyle.muted)
+            }
+            Spacer()
+            if memo.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DreamCueStyle.gold)
+            }
+            Text(memo.isActive ? "Current" : "Cleared")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(DreamCueStyle.selected, in: Capsule())
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DreamCueStyle.muted)
+        }
+        .padding(14)
+        .background(rowBackground, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(memo.pinned ? DreamCueStyle.gold.opacity(0.30) : DreamCueStyle.border, lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var dragActivationGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.5)
+            .onEnded { _ in
+                beginDrag()
+            }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged(handleDragChange)
+            .onEnded(finishDrag)
     }
 
     private var rowBackground: Color {
         if isDragging {
             return DreamCueStyle.selected
         }
-        return memo.pinned ? DreamCueStyle.border.opacity(0.28) : DreamCueStyle.panel
+        if memo.pinned {
+            return DreamCueStyle.border.opacity(0.18)
+        }
+        return DreamCueStyle.panel
     }
 
-    private func handleLongPressDragChange(
-        _ value: SequenceGesture<LongPressGesture, DragGesture>.Value
-    ) {
-        switch value {
-        case .first(true):
-            isDragging = true
+    private func beginDrag() {
+        guard !isDragging else { return }
+        isDragging = true
+        hasMovedAfterLongPress = false
+        dragTranslation = 0
+        onDragPreviewChange(index)
+        scheduleIdleDragCleanup()
+    }
+
+    private func handleDragChange(_ value: DragGesture.Value) {
+        guard isDragging else { return }
+        hasMovedAfterLongPress = true
+        dragTranslation = value.translation.height
+        onDragPreviewChange(dragTarget(for: value.translation.height))
+    }
+
+    private func openIfAllowed() {
+        guard !isDragging, !suppressTapAfterDrag else { return }
+        onOpen(memo)
+    }
+
+    private func finishDrag(_ value: DragGesture.Value) {
+        let wasDragging = isDragging
+        let target = hasMovedAfterLongPress ? dragTarget(for: value.translation.height) : index
+        if wasDragging {
+            suppressTapAfterDrag = true
+        }
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) {
+            isDragging = false
             dragTranslation = 0
-            onDragPreviewChange(index)
-        case .second(true, let dragValue):
-            isDragging = true
-            dragTranslation = dragValue?.translation.height ?? 0
-            onDragPreviewChange(longPressDragTarget(value))
-        default:
-            break
+        }
+        onDragPreviewChange(nil)
+        if wasDragging, target != index {
+            onMove(index, target)
+        }
+        if wasDragging {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                suppressTapAfterDrag = false
+            }
         }
     }
 
-    private func longPressDragTarget(
-        _ value: SequenceGesture<LongPressGesture, DragGesture>.Value
-    ) -> Int {
-        guard case .second(true, let dragValue) = value else {
-            return index
+    private func resetDragState() {
+        isDragging = false
+        dragTranslation = 0
+        suppressTapAfterDrag = false
+        hasMovedAfterLongPress = false
+        onDragPreviewChange(nil)
+    }
+
+    private func scheduleIdleDragCleanup() {
+        dragActivationSerial += 1
+        let currentSerial = dragActivationSerial
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard dragActivationSerial == currentSerial, isDragging, !hasMovedAfterLongPress else { return }
+            resetDragState()
         }
+    }
+
+    private func dragTarget(for translationY: CGFloat) -> Int {
         return CueDragPresentation.targetIndex(
             index: index,
             rowCount: rowCount,
-            translationY: dragValue?.translation.height ?? 0
+            translationY: translationY
         )
     }
 }
@@ -1240,7 +1222,7 @@ private struct ArchiveRow: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
                     .frame(width: 38, height: 24)
-                    .background(memo.pinned ? DreamCueStyle.border.opacity(0.28) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
+                    .background(memo.pinned ? DreamCueStyle.gold.opacity(0.12) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(memo.content)
                         .font(.body.weight(.semibold))
@@ -1254,7 +1236,7 @@ private struct ArchiveRow: View {
                 if memo.pinned {
                     Image(systemName: "pin.fill")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(DreamCueStyle.muted)
+                        .foregroundStyle(DreamCueStyle.gold)
                 }
                 Text(memo.isActive ? "Current" : "Cleared")
                     .font(.caption)

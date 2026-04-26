@@ -1,12 +1,6 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Release version, for example v1.2.3
-        required: true
-        type: string
   push:
     tags:
       - "v*"
@@ -15,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version }}
+  RELEASE_VERSION: ${{ github.ref_name }}
 
 jobs:
   android-release:

@@ -16,8 +16,10 @@ final class MemoStore: ObservableObject {
     @Published var reminderMinute = 0
 
     private let storageURL: URL
+    private let settingsURL: URL
     private let deletedMemoTombstonesURL: URL
     private let syncService = FirebaseRestSyncService()
+    private let notificationScheduler = DreamCueReminderNotificationScheduler.shared
     private var pollTask: Task<Void, Never>?
     private var deletedMemoTombstones: [String: Int64] = [:]
 
@@ -34,13 +36,16 @@ final class MemoStore: ObservableObject {
         }
         try? FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
         storageURL = appURL.appendingPathComponent("memos.json")
+        settingsURL = appURL.appendingPathComponent("settings.json")
         deletedMemoTombstonesURL = appURL.appendingPathComponent("deleted-memos.json")
+        loadSettings()
         load()
         if let previewEmail = ProcessInfo.processInfo.environment["DREAMCUE_PREVIEW_SYNC_EMAIL"], !previewEmail.isEmpty {
             signedInEmail = previewEmail
             syncEmail = previewEmail
             syncStatus = "Sync account signed in."
         }
+        syncReminderNotifications(requestAuthorization: false)
     }
 
     var currentMemos: [Memo] {
@@ -96,7 +101,7 @@ final class MemoStore: ObservableObject {
         )
         memos.append(memo)
         draft = ""
-        persistAndUpload()
+        persistAndUpload(requestAuthorization: true)
     }
 
     func updateMemo(_ memo: Memo, content: String) {
@@ -136,7 +141,7 @@ final class MemoStore: ObservableObject {
         memos[index].pinned = pinned
         memos[index].displayOrder = now
         memos[index].updatedAtMs = now
-        persistAndUpload()
+        persistAndUpload(requestAuthorization: true)
     }
 
     func moveCurrentMemo(from sourceIndex: Int, to destinationIndex: Int) {
@@ -158,6 +163,7 @@ final class MemoStore: ObservableObject {
         memos.removeAll { $0.id == memo.id }
         deletedMemoTombstones[memo.id] = deletedAtMs
         persist()
+        syncReminderNotifications(requestAuthorization: false)
         persistDeletedMemoTombstones()
         Task {
             await syncService.uploadDeletedMemo(id: memo.id, deletedAtMs: deletedAtMs)
@@ -222,6 +228,14 @@ final class MemoStore: ObservableObject {
     func setReminderTime(hour: Int, minute: Int) {
         reminderHour = hour
         reminderMinute = minute
+        persistSettings()
+        syncReminderNotifications(requestAuthorization: dailyReminderEnabled)
+    }
+
+    func setDailyReminderEnabled(_ enabled: Bool) {
+        dailyReminderEnabled = enabled
+        persistSettings()
+        syncReminderNotifications(requestAuthorization: enabled)
     }
 
     private func load() {
@@ -234,9 +248,31 @@ final class MemoStore: ObservableObject {
         }
     }
 
+    private func loadSettings() {
+        guard let data = try? Data(contentsOf: settingsURL),
+              let settings = try? JSONDecoder().decode(ReminderSettings.self, from: data)
+        else {
+            return
+        }
+        dailyReminderEnabled = settings.dailyReminderEnabled
+        reminderHour = settings.reminderHour
+        reminderMinute = settings.reminderMinute
+    }
+
     private func persist() {
         if let data = try? JSONEncoder().encode(memos) {
             try? data.write(to: storageURL, options: .atomic)
+        }
+    }
+
+    private func persistSettings() {
+        let settings = ReminderSettings(
+            dailyReminderEnabled: dailyReminderEnabled,
+            reminderHour: reminderHour,
+            reminderMinute: reminderMinute
+        )
+        if let data = try? JSONEncoder().encode(settings) {
+            try? data.write(to: settingsURL, options: .atomic)
         }
     }
 
@@ -246,8 +282,9 @@ final class MemoStore: ObservableObject {
         }
     }
 
-    private func persistAndUpload() {
+    private func persistAndUpload(requestAuthorization: Bool = false) {
         persist()
+        syncReminderNotifications(requestAuthorization: requestAuthorization)
         Task {
             await syncService.uploadMemos(memos)
         }
@@ -263,6 +300,7 @@ final class MemoStore: ObservableObject {
         memos = outcome.memos
         deletedMemoTombstones = outcome.deletedMemoTombstones
         persist()
+        syncReminderNotifications(requestAuthorization: false)
         persistDeletedMemoTombstones()
         for deletedMemo in outcome.deletedMemosToUpload {
             await syncService.uploadDeletedMemo(
@@ -296,6 +334,26 @@ final class MemoStore: ObservableObject {
     private func currentTimeMs() -> Int64 {
         Int64(Date().timeIntervalSince1970 * 1000)
     }
+
+    private func syncReminderNotifications(requestAuthorization: Bool) {
+        if ProcessInfo.processInfo.environment["DREAMCUE_NOTIFICATIONS_DISABLED"] == "1" {
+            notificationScheduler.cancelAll()
+            return
+        }
+        notificationScheduler.sync(
+            enabled: dailyReminderEnabled,
+            hour: reminderHour,
+            minute: reminderMinute,
+            memos: memos,
+            requestAuthorization: requestAuthorization
+        )
+    }
+}
+
+private struct ReminderSettings: Codable {
+    let dailyReminderEnabled: Bool
+    let reminderHour: Int
+    let reminderMinute: Int
 }
 
 private func activeMemoSort(_ lhs: Memo, _ rhs: Memo) -> Bool {

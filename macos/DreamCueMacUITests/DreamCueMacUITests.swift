@@ -167,7 +167,7 @@ final class DreamCueMacUITests: XCTestCase {
         XCTAssertEqual(app.buttons[thirdCue].value as? String, "#01")
         XCTAssertEqual(app.buttons[secondCue].value as? String, "#02")
         XCTAssertEqual(app.buttons[firstCue].value as? String, "#03")
-        app.buttons[thirdCue].press(forDuration: 0.7, thenDragTo: app.buttons[firstCue])
+        dragCue(app.buttons[thirdCue], below: app.buttons[firstCue])
 
         XCTAssertTrue(app.buttons[secondCue].waitForExistence(timeout: 5))
         XCTAssertLessThan(app.buttons[secondCue].frame.minY, app.buttons[thirdCue].frame.minY)
@@ -374,7 +374,7 @@ final class DreamCueMacUITests: XCTestCase {
         createCue(thirdCue, app: app)
         assertVisibleOrder([thirdCue, secondCue, firstCue], app: app)
 
-        app.buttons[thirdCue].press(forDuration: 0.7, thenDragTo: app.buttons[firstCue])
+        dragCue(app.buttons[thirdCue], below: app.buttons[firstCue])
         assertVisibleOrder([secondCue, firstCue, thirdCue], app: app)
         attachScreenshot("mac-sync-uploaded-mac-order", app: app)
     }
@@ -388,6 +388,16 @@ final class DreamCueMacUITests: XCTestCase {
         focusCueEditor(app)
         paste(text, app: app)
         app.buttons["Save"].click()
+    }
+
+    private func dragCue(_ source: XCUIElement, below destination: XCUIElement) {
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        let sourceFrame = source.frame
+        let destinationFrame = destination.frame
+        let startpoint = source.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let endpoint = startpoint.withOffset(CGVector(dx: 0, dy: destinationFrame.maxY + 20 - sourceFrame.midY))
+        startpoint.press(forDuration: 0.7, thenDragTo: endpoint)
     }
 
     private func focusCueEditor(_ app: XCUIApplication) {

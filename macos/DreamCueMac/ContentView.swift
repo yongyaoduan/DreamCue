@@ -662,8 +662,17 @@ private struct CommittingTextEditor: NSViewRepresentable {
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                onCommit()
-                return true
+                switch ReturnKeyCommitPolicy.action(
+                    isReturnKey: true,
+                    commandModified: false,
+                    hasMarkedText: textView.hasMarkedText()
+                ) {
+                case .commit:
+                    onCommit()
+                    return true
+                case .ignore, .insertNewline:
+                    return false
+                }
             }
             return false
         }
@@ -680,9 +689,16 @@ private final class CommitTextView: NSTextView {
             return
         }
 
-        if event.modifierFlags.contains(.command) {
+        switch ReturnKeyCommitPolicy.action(
+            isReturnKey: true,
+            commandModified: event.modifierFlags.contains(.command),
+            hasMarkedText: hasMarkedText()
+        ) {
+        case .ignore:
+            super.keyDown(with: event)
+        case .insertNewline:
             insertText("\n", replacementRange: selectedRange())
-        } else {
+        case .commit:
             onCommit?()
         }
     }
@@ -720,9 +736,18 @@ private struct ReturnCommitHandler: NSViewRepresentable {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 let isReturn = event.keyCode == 36 || event.keyCode == 76
-                guard isReturn, !event.modifierFlags.contains(.command) else { return event }
-                self?.onCommit()
-                return nil
+                let hasMarkedText = (event.window?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
+                switch ReturnKeyCommitPolicy.action(
+                    isReturnKey: isReturn,
+                    commandModified: event.modifierFlags.contains(.command),
+                    hasMarkedText: hasMarkedText
+                ) {
+                case .commit:
+                    self?.onCommit()
+                    return nil
+                case .ignore, .insertNewline:
+                    return event
+                }
             }
         }
 
@@ -750,7 +775,6 @@ private struct NewCueSheet: View {
                     .buttonStyle(SecondaryButtonStyle())
                 Button("Save", action: onSave)
                     .buttonStyle(PrimaryButtonStyle())
-                    .keyboardShortcut(.return, modifiers: [])
             }
             CommittingTextEditor(text: $draft, accessibilityLabel: "Cue Text", focusOnAppear: true, onCommit: onSave)
                 .frame(maxWidth: .infinity)
@@ -792,7 +816,6 @@ private struct CueDetailSheet: View {
                 Spacer()
                 Button("Save", action: onSave)
                     .buttonStyle(PrimaryButtonStyle())
-                    .keyboardShortcut(.return, modifiers: [])
             }
             .padding(16)
 

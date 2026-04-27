@@ -124,6 +124,7 @@ import androidx.core.view.WindowCompat
 import app.dreamcue.R
 import app.dreamcue.model.Memo
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -140,13 +141,17 @@ private val Brass = Color(0xFFC9A46A)
 private val Clay = Color(0xFFC4614B)
 private val Line = Color(0xFFD9D1C4)
 private val DeepForest = Color(0xFF0F3D2E)
-private val PinnedPanel = Color(0xFFF3F0E8)
+private val PinnedPanel = Color(0xFFF0EFEB)
 private val ScreenPadding = PaddingValues(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 18.dp)
 private const val CueLongPressMillis = 500L
 val CueDragOffsetYKey = SemanticsPropertyKey<Float>("CueDragOffsetY")
 var SemanticsPropertyReceiver.cueDragOffsetY by CueDragOffsetYKey
 val CueAvoidanceOffsetYKey = SemanticsPropertyKey<Float>("CueAvoidanceOffsetY")
 var SemanticsPropertyReceiver.cueAvoidanceOffsetY by CueAvoidanceOffsetYKey
+val CuePinnedKey = SemanticsPropertyKey<Boolean>("CuePinned")
+var SemanticsPropertyReceiver.cuePinned by CuePinnedKey
+val CueDraggingKey = SemanticsPropertyKey<Boolean>("CueDragging")
+var SemanticsPropertyReceiver.cueDragging by CueDraggingKey
 val TimeWheelDragOffsetYKey = SemanticsPropertyKey<Float>("TimeWheelDragOffsetY")
 var SemanticsPropertyReceiver.timeWheelDragOffsetY by TimeWheelDragOffsetYKey
 val TimeWheelSelectedValueKey = SemanticsPropertyKey<Int>("TimeWheelSelectedValue")
@@ -162,6 +167,15 @@ private val DreamCueColorScheme = lightColorScheme(
     outline = Line,
     error = Clay,
 )
+
+internal fun timeOfDayGreeting(calendar: Calendar = Calendar.getInstance()): String {
+    return when (calendar.get(Calendar.HOUR_OF_DAY)) {
+        in 5..11 -> "Good morning"
+        in 12..16 -> "Good afternoon"
+        in 17..21 -> "Good evening"
+        else -> "Good night"
+    }
+}
 
 @Composable
 fun DreamCueApp(
@@ -662,11 +676,7 @@ private fun AccountScreen(
                 )
             }
             item {
-                NoticePanel(
-                    title = "Sync Health",
-                    content = "Cue changes stay private to this account and sync automatically.",
-                    tone = Forest.copy(alpha = 0.08f),
-                )
+                SyncHealthPanel()
             }
         } else {
             item {
@@ -710,7 +720,6 @@ private fun AccountScreen(
                             text = "Sign In",
                             onClick = onSignInSync,
                             modifier = Modifier.weight(1f),
-                            trailingIcon = Icons.Outlined.Lock,
                         )
                     }
                 }
@@ -843,19 +852,41 @@ private fun AppHeader(
 
 @Composable
 private fun HomeTopBar() {
-    Box(
+    val greeting = remember { timeOfDayGreeting(Calendar.getInstance()) }
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp),
+            .height(66.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
     ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = greeting,
+                color = Ink,
+                fontFamily = FontFamily.Serif,
+                fontSize = 26.sp,
+                lineHeight = 30.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = "Keep what matters in rhythm.",
+                color = InkSoft,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         Text(
             text = "DreamCue",
-            modifier = Modifier.align(Alignment.Center),
             color = DeepForest,
             fontFamily = FontFamily.Serif,
-            fontSize = 19.sp,
-            lineHeight = 22.sp,
+            fontSize = 17.sp,
+            lineHeight = 20.sp,
             fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 12.dp, top = 2.dp),
         )
     }
 }
@@ -1135,17 +1166,19 @@ private fun CueCard(
     numberTag: String? = null,
     isDragging: Boolean = false,
 ) {
+    val cardModifier = if (isDragging) Modifier else Modifier.clickable(onClick = onOpen)
+
     ElevatedPanel(
-        modifier = Modifier.clickable(onClick = onOpen),
+        modifier = cardModifier,
         color = when {
-            isDragging -> ForestSoft
+            isDragging -> Color(0xFFE8E8E4)
             memo.pinned -> PinnedPanel
             else -> Porcelain
         },
         contentPadding = PaddingValues(15.dp),
         border = BorderStroke(
             1.dp,
-            if (memo.pinned) Brass.copy(alpha = 0.28f) else Line.copy(alpha = 0.58f),
+            if (memo.pinned) Line.copy(alpha = 0.70f) else Line.copy(alpha = 0.58f),
         ),
     ) {
         Row(
@@ -1155,10 +1188,13 @@ private fun CueCard(
         ) {
             NumberMarker(
                 number = displayNumber,
-                pinned = false,
+                pinned = memo.pinned,
                 color = accent,
                 textModifier = numberTag?.let { Modifier.testTag(it) } ?: Modifier,
             )
+            if (isDragging) {
+                DragGrip()
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1180,15 +1216,7 @@ private fun CueCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (memo.pinned && !isDragging) {
-                            Icon(
-                                imageVector = Icons.Outlined.PushPin,
-                                contentDescription = null,
-                                tint = Brass.copy(alpha = 0.72f),
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
-                        StatusChip(statusLabel, accent)
+                        StatusChip(if (isDragging) "Moving" else statusLabel, if (isDragging) InkSoft else accent)
                     }
                 }
                 Text(
@@ -1199,11 +1227,32 @@ private fun CueCard(
                     modifier = Modifier.padding(top = 7.dp),
                 )
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = InkSoft,
-                modifier = Modifier.size(20.dp),
+            if (!isDragging) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = InkSoft,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DragGrip() {
+    Column(
+        modifier = Modifier
+            .padding(top = 6.dp)
+            .width(18.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        repeat(3) {
+            Box(
+                modifier = Modifier
+                    .size(width = 15.dp, height = 2.dp)
+                    .background(InkSoft.copy(alpha = 0.44f), RoundedCornerShape(999.dp)),
             )
         }
     }
@@ -1249,6 +1298,8 @@ private fun ReorderableCueCard(
             .semantics {
                 cueDragOffsetY = visibleDragOffset
                 cueAvoidanceOffsetY = avoidanceOffset
+                cuePinned = memo.pinned
+                cueDragging = isDragging
             }
             .pointerInput(index, count) {
                 detectDragGesturesAfterLongPress(
@@ -1328,14 +1379,14 @@ private fun SearchResultCueCard(
         contentPadding = PaddingValues(15.dp),
         border = BorderStroke(
             1.dp,
-            if (memo.pinned) Brass.copy(alpha = 0.28f) else Line.copy(alpha = 0.58f),
+            if (memo.pinned) Line.copy(alpha = 0.70f) else Line.copy(alpha = 0.58f),
         ),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            NumberMarker(displayNumber, false, Forest)
+            NumberMarker(displayNumber, memo.pinned, Forest)
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1357,14 +1408,6 @@ private fun SearchResultCueCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (memo.pinned) {
-                            Icon(
-                                imageVector = Icons.Outlined.PushPin,
-                                contentDescription = null,
-                                tint = Brass.copy(alpha = 0.72f),
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
                         StatusChip(label, if (memo.isActive) Forest else Brass)
                     }
                 }
@@ -1393,7 +1436,7 @@ private fun TimelineCue(
         contentPadding = PaddingValues(15.dp),
         border = BorderStroke(
             1.dp,
-            if (memo.pinned) Brass.copy(alpha = 0.28f) else Line.copy(alpha = 0.58f),
+            if (memo.pinned) Line.copy(alpha = 0.70f) else Line.copy(alpha = 0.58f),
         ),
     ) {
         Row(
@@ -1401,7 +1444,7 @@ private fun TimelineCue(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            NumberMarker(displayNumber, false, if (memo.isActive) Forest else Brass)
+            NumberMarker(displayNumber, memo.pinned, if (memo.isActive) Forest else Brass)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = memo.content,
@@ -1423,14 +1466,6 @@ private fun TimelineCue(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (memo.pinned) {
-                    Icon(
-                        imageVector = Icons.Outlined.PushPin,
-                        contentDescription = null,
-                        tint = Brass.copy(alpha = 0.72f),
-                        modifier = Modifier.size(14.dp),
-                    )
-                }
                 StatusChip(
                     text = if (memo.isActive) "Current" else "Cleared",
                     color = if (memo.isActive) Forest else Brass,
@@ -1473,6 +1508,51 @@ private fun FirstCuePanel(onOpenCapture: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
             PrimaryButton(text = "Write your first cue", onClick = onOpenCapture)
+        }
+    }
+}
+
+@Composable
+private fun SyncHealthPanel() {
+    ElevatedPanel(
+        color = Porcelain,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(31.dp)
+                    .background(Forest.copy(alpha = 0.10f), RoundedCornerShape(999.dp)),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Sync Health",
+                    color = Ink,
+                    fontSize = 15.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Private sync is up to date.",
+                    color = InkSoft,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.CheckCircle,
+                contentDescription = null,
+                tint = Forest,
+                modifier = Modifier.size(19.dp),
+            )
         }
     }
 }
@@ -1533,31 +1613,31 @@ private fun ConnectedAccountPanel(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Forest,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 10.dp,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 7.dp,
     ) {
         Column(
-            modifier = Modifier.padding(17.dp),
-            verticalArrangement = Arrangement.spacedBy(13.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 StatusChip("Private sync", Porcelain, dark = true)
                 Text(
                     text = displayEmail,
                     color = Porcelain,
-                    fontSize = 19.sp,
-                    lineHeight = 24.sp,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 13.dp),
+                    modifier = Modifier.padding(top = 10.dp),
                 )
                 Text(
                     text = displayStatus,
                     color = Porcelain.copy(alpha = 0.72f),
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 5.dp),
                 )
@@ -1982,7 +2062,7 @@ private fun MemoDetailDialog(
                     )
                 }
                 DetailActionButton(
-                    contentDescription = if (memo.isActive) "Complete cue" else "Restore cue",
+                    contentDescription = if (memo.isActive) "Complete cue" else "Return to Today",
                     icon = if (memo.isActive) Icons.Outlined.TaskAlt else Icons.AutoMirrored.Outlined.Undo,
                     onClick = onPrimaryAction,
                     modifier = Modifier.weight(1f),
@@ -2310,9 +2390,9 @@ private fun NumberMarker(
         modifier = Modifier
             .padding(top = 1.dp)
             .size(width = 34.dp, height = 28.dp),
-        color = if (pinned) Brass.copy(alpha = 0.13f) else color.copy(alpha = 0.12f),
+        color = if (pinned) Line.copy(alpha = 0.42f) else color.copy(alpha = 0.12f),
         shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, if (pinned) Brass.copy(alpha = 0.28f) else color.copy(alpha = 0.18f)),
+        border = BorderStroke(1.dp, if (pinned) Line.copy(alpha = 0.72f) else color.copy(alpha = 0.18f)),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(

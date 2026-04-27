@@ -14,7 +14,7 @@ struct ReminderNotificationPlan {
         let activeMemos = memos.filter(\.isActive)
         return ReminderNotificationPlan(
             individualMemos: activeMemos.filter(\.pinned),
-            summaryCount: activeMemos.count
+            summaryCount: activeMemos.filter { !$0.pinned }.count
         )
     }
 }
@@ -34,7 +34,7 @@ final class DreamCueReminderNotificationScheduler {
         replacePendingRequests {
             guard enabled else { return }
             let plan = ReminderNotificationPlan.fromMemos(memos)
-            guard plan.summaryCount > 0 else { return }
+            guard plan.summaryCount > 0 || !plan.individualMemos.isEmpty else { return }
             if requestAuthorization {
                 self.center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
                     guard granted else { return }
@@ -82,16 +82,18 @@ final class DreamCueReminderNotificationScheduler {
                 )
             )
         }
-        let summary = UNMutableNotificationContent()
-        summary.title = "DreamCue"
-        summary.body = plan.summaryText
-        summary.sound = .default
-        center.add(
-            UNNotificationRequest(
-                identifier: summaryIdentifier,
-                content: summary,
-                trigger: trigger
+        if plan.summaryCount > 0 {
+            let summary = UNMutableNotificationContent()
+            summary.title = "DreamCue"
+            summary.body = plan.summaryText
+            summary.sound = .default
+            center.add(
+                UNNotificationRequest(
+                    identifier: summaryIdentifier,
+                    content: summary,
+                    trigger: trigger
+                )
             )
-        )
+        }
     }
 }

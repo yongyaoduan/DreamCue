@@ -32,7 +32,7 @@ class DreamCueFirebaseOrderSyncTest {
         assumeTrue(argument("dreamcueOrderSyncMode") == "upload")
         val email = requiredArgument("dreamcueOrderSyncEmail")
         val password = requiredArgument("dreamcueOrderSyncPassword")
-        val prefix = requiredArgument("dreamcueOrderSyncPrefix")
+        val prefix = "${requiredArgument("dreamcueOrderSyncPrefix")}_${System.currentTimeMillis()}"
         val first = "${prefix}_first"
         val second = "${prefix}_second"
         val third = "${prefix}_third"

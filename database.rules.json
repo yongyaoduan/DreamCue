@@ -8,7 +8,7 @@
         ".write": "auth != null && auth.uid === $uid",
         "memos": {
           "$memoId": {
-            ".validate": "newData.hasChildren(['content', 'status', 'created_at_ms', 'updated_at_ms', 'reminder_count', 'deleted']) && newData.child('content').isString() && (newData.child('status').val() === 'active' || newData.child('status').val() === 'cleared') && newData.child('created_at_ms').isNumber() && newData.child('updated_at_ms').isNumber() && newData.child('reminder_count').isNumber() && newData.child('deleted').isBoolean()"
+            ".validate": "newData.hasChildren(['content', 'status', 'created_at_ms', 'updated_at_ms', 'reminder_count', 'display_order', 'pinned', 'deleted']) && newData.child('content').isString() && (newData.child('status').val() === 'active' || newData.child('status').val() === 'cleared') && newData.child('created_at_ms').isNumber() && newData.child('updated_at_ms').isNumber() && newData.child('reminder_count').isNumber() && newData.child('display_order').isNumber() && newData.child('pinned').isBoolean() && newData.child('deleted').isBoolean()"
           }
         }
       }

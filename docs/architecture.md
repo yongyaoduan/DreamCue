@@ -137,5 +137,5 @@ Responsibilities:
 ## Limits
 
 1. Search is not embedding-based semantic search yet.
-2. Notifications open the Android App for review; they do not yet provide per-memo actions inside the notification.
+2. Notifications open the Android app for review. Pinned due cues receive individual notifications, while regular due cues are represented by one summary notification.
 3. macOS sync uses polling instead of a Realtime Database stream because the macOS client avoids bundling the Firebase Apple SDK in this repository version.

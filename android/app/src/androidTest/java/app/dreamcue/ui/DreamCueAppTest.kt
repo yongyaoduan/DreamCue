@@ -28,6 +28,7 @@ import androidx.test.uiautomator.UiDevice
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
+import java.util.Calendar
 import kotlin.math.roundToInt
 
 class DreamCueAppTest {
@@ -63,6 +64,7 @@ class DreamCueAppTest {
             )
         }
 
+        composeRule.onNodeWithText(timeOfDayGreeting(Calendar.getInstance())).assertIsDisplayed()
         assert(composeRule.onAllNodesWithText("DreamCue").fetchSemanticsNodes().isNotEmpty())
         assert(composeRule.onAllNodesWithText("Recall").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithContentDescription("DreamCue menu").fetchSemanticsNodes().isEmpty())
@@ -252,7 +254,9 @@ class DreamCueAppTest {
         composeRule.waitForIdle()
 
         val draggingOffset = cue.fetchSemanticsNode().config[CueDragOffsetYKey]
+        val isDragging = cue.fetchSemanticsNode().config[CueDraggingKey]
         assert(draggingOffset > 90f)
+        assert(isDragging)
         takeDeviceScreenshotIfRequested()
 
         cue.performTouchInput {
@@ -470,7 +474,62 @@ class DreamCueAppTest {
 
         composeRule.onNodeWithTag("currentCueNumber.${pinnedMemo.id}", useUnmergedTree = true).assertTextEquals("#01")
         composeRule.onNodeWithTag("currentCueNumber.${secondActiveMemo.id}", useUnmergedTree = true).assertTextEquals("#02")
+        assert(
+            composeRule.onNodeWithTag("currentCue.${pinnedMemo.id}")
+                .fetchSemanticsNode()
+                .config[CuePinnedKey],
+        )
         assert(composeRule.onAllNodesWithText("Pinned").fetchSemanticsNodes().isEmpty())
+        takeDeviceScreenshotIfRequested()
+    }
+
+    @Test
+    fun unpinnedTodayCueReturnsToPlainRowTreatment() {
+        var state by mutableStateOf(
+            MainUiState(
+                currentMemos = listOf(activeMemo.copy(pinned = true), secondActiveMemo),
+            ),
+        )
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+            )
+        }
+
+        assert(
+            composeRule.onNodeWithTag("currentCue.${activeMemo.id}")
+                .fetchSemanticsNode()
+                .config[CuePinnedKey],
+        )
+
+        state = state.copy(currentMemos = listOf(activeMemo.copy(pinned = false), secondActiveMemo))
+        composeRule.waitForIdle()
+
+        assert(
+            !composeRule.onNodeWithTag("currentCue.${activeMemo.id}")
+                .fetchSemanticsNode()
+                .config[CuePinnedKey],
+        )
         takeDeviceScreenshotIfRequested()
     }
 
@@ -555,8 +614,10 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("syncpeer1777...@example.com").assertIsDisplayed()
         composeRule.onNodeWithText("Realtime sync is active.").assertIsDisplayed()
         composeRule.onNodeWithText("Private sync").assertIsDisplayed()
+        composeRule.onNodeWithText("Private sync is up to date.").assertIsDisplayed()
         assert(composeRule.onAllNodesWithText(longEmail).fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Syncing as $longEmail.").fetchSemanticsNodes().isEmpty())
+        assert(composeRule.onAllNodesWithText("Cue changes stay private to this account and sync automatically.").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Remote path").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("users/{uid}/memos").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Pending uploads").fetchSemanticsNodes().isEmpty())
@@ -714,7 +775,7 @@ class DreamCueAppTest {
         assert(composeRule.onAllNodesWithText("Last reminded").fetchSemanticsNodes().isEmpty())
         composeRule.onNodeWithContentDescription("Delete cue").assertIsDisplayed()
         assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
-        composeRule.onNodeWithContentDescription("Restore cue").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Return to Today").assertIsDisplayed()
     }
 
     @Test
@@ -806,7 +867,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Archived Cue").assertIsDisplayed()
         composeRule.onNodeWithText("Completed").assertIsDisplayed()
         assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
-        composeRule.onNodeWithContentDescription("Restore cue").performClick()
+        composeRule.onNodeWithContentDescription("Return to Today").performClick()
 
         assert(restoredMemoId == archivedMemo.id)
     }
@@ -947,8 +1008,8 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Private sync").assertIsDisplayed()
         composeRule.onNodeWithText(email).assertIsDisplayed()
         composeRule.onNodeWithText("Last sync").assertIsDisplayed()
-        composeRule.onNodeWithText("Cue changes stay private to this account and sync automatically.")
-            .assertIsDisplayed()
+        composeRule.onNodeWithText("Private sync is up to date.").assertIsDisplayed()
+        assert(composeRule.onAllNodesWithText("Cue changes stay private to this account and sync automatically.").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Remote path").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("users/{uid}/memos").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Pending uploads").fetchSemanticsNodes().isEmpty())
@@ -1171,7 +1232,7 @@ class DreamCueAppTest {
         state = state.copy(selectedMemo = null)
         composeRule.onNodeWithText(archivedMemo.content).performClick()
         composeRule.onNodeWithText("Archived Cue").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Restore cue").performClick()
+        composeRule.onNodeWithContentDescription("Return to Today").performClick()
         assert(restoredMemoId == archivedMemo.id)
         assert(composeRule.onAllNodesWithContentDescription("Keep cue").fetchSemanticsNodes().isEmpty())
     }

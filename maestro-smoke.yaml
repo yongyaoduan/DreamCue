@@ -3,24 +3,20 @@ appId: app.dreamcue
 - clearState
 - launchApp
 - assertVisible: "DreamCue"
-- assertVisible: "Capture a cue..."
 - assertVisible: "Active Cues"
 
-- tapOn: "Capture a cue..."
+- tapOn: "New Cue"
 - assertVisible: "New Cue"
-- assertVisible: "Short memo"
-- tapOn: "Add details"
-- assertVisible: "Cue details"
-- assertVisible: "Save with context"
-- tapOn: "Short memo"
+- assertVisible: "Cue"
+- tapOn: "Cue"
 - inputText: "alpha_note"
 - hideKeyboard
 - tapOn: "Save"
 - assertVisible: "alpha_note"
 
-- tapOn: "Capture a cue..."
+- tapOn: "New Cue"
 - assertVisible: "New Cue"
-- tapOn: "Short memo"
+- tapOn: "Cue"
 - inputText: "beta_note"
 - hideKeyboard
 - tapOn: "Save"
@@ -37,12 +33,12 @@ appId: app.dreamcue
 - tapOn: "Search archive"
 - inputText: "beta"
 - hideKeyboard
-- tapOn: "Run Search"
+- tapOn: "Run archive search"
 - assertVisible: "Search Results"
 - assertVisible: "beta_note"
 - tapOn: "beta_note"
 - assertVisible: "Archived Cue"
-- tapOn: "Restore cue"
+- tapOn: "Return to Today"
 
 - tapOn: "Rhythm"
 - assertVisible: "Reminder Rhythm"
@@ -69,4 +65,4 @@ appId: app.dreamcue
 - assertVisible: "Enter an email and password."
 - tapOn: "Sign In"
 - assertVisible: "Enter an email and password."
-- assertVisible: "Tenant-scoped privacy"
+- assertVisible: "Private sync"

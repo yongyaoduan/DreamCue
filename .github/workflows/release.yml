@@ -194,13 +194,13 @@ jobs:
             ## Highlights
             - Adds tenant-scoped Firebase sync for cue order, pinned state, restore, completion, and deletion tombstones.
             - Adds pinned cues above regular cues, persistent drag ordering, and archive restore-to-today behavior.
-            - Refines Android interactions with a real wheel-style reminder time picker, archive-wide search, notification-only reminders, and pinned notification summaries.
-            - Refines macOS interactions with full-row navigation hit targets, Return-to-save editing, compact Account/Rhythm layouts, and Google Material SVG action icons.
+            - Refines Android interactions with a real wheel-style reminder time picker, archive-wide search, notification-only reminders, individual pinned-cue notifications, and one regular-cue summary count.
+            - Refines macOS interactions with full-row navigation hit targets, Return-to-save editing, compact Account/Rhythm layouts, Archive-specific actions, and Google Material SVG action icons.
             - GitHub release assets intentionally include the Android APK and macOS zip only. Play Store AAB delivery is handled separately.
 
             ## Verification
             - Rust workspace tests pass.
-            - Android unit tests and connected UI tests pass on an emulator.
+            - Android unit tests and UI test compilation pass in CI; connected UI tests are validated locally before publishing.
             - macOS XCUITest passes, with the Firebase sync test disabled by default for deterministic CI.
             - Documentation is checked for user-facing tone, and repository UI/docs text is English-only.
             - macOS release package is signed with Developer ID and notarized when Apple signing secrets are configured.

@@ -66,59 +66,41 @@ object NotificationHelper {
             return
         }
 
-        val plan = ReminderNotificationPlan.fromMemos(memos)
-        plan.individualMemos.forEach { memo ->
-            Log.d(TAG, "Posting reminder for memo=${memo.id}")
+        ReminderNotificationPlan.fromMemos(memos).requests.forEach { request ->
+            val memo = request.memo
+            val notificationId = memo?.let { notificationIdForMemo(it.id) } ?: SUMMARY_NOTIFICATION_ID
+            Log.d(TAG, "Posting reminder notification=$notificationId memo=${memo?.id ?: "summary"}")
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("memo_id", memo.id)
+                if (memo != null) {
+                    putExtra("memo_id", memo.id)
+                }
             }
             val pendingIntent = PendingIntent.getActivity(
                 context,
-                notificationIdForMemo(memo.id),
+                notificationId,
                 openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("Pinned Cue")
-                .setContentText(memo.content)
-                .setSubText("Added ${formatTimestamp(memo.createdAtMs)}")
-                .setStyle(NotificationCompat.BigTextStyle().bigText(memo.content))
+                .setContentTitle(request.title)
+                .setContentText(request.text)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setAutoCancel(false)
+                .setAutoCancel(request.autoCancel)
                 .setOnlyAlertOnce(false)
                 .setContentIntent(pendingIntent)
-                .build()
 
-            NotificationManagerCompat.from(context).notify(notificationIdForMemo(memo.id), notification)
-        }
-        if (plan.summaryCount > 0) {
-            val openAppIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (memo != null) {
+                builder
+                    .setSubText("Added ${formatTimestamp(memo.createdAtMs)}")
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(memo.content))
             }
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                SUMMARY_NOTIFICATION_ID,
-                openAppIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("DreamCue")
-                .setContentText(plan.summaryText)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setAutoCancel(false)
-                .setOnlyAlertOnce(false)
-                .setContentIntent(pendingIntent)
-                .build()
 
-            NotificationManagerCompat.from(context).notify(SUMMARY_NOTIFICATION_ID, notification)
+            NotificationManagerCompat.from(context).notify(notificationId, builder.build())
         }
     }
 

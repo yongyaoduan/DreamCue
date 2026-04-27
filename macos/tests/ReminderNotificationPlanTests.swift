@@ -13,12 +13,12 @@ enum ReminderNotificationPlanTests {
             "Pinned active cue must receive an individual notification."
         )
         check(
-            mixedPlan.summaryCount == 2,
-            "Summary count must include all active cues and exclude cleared cues."
+            mixedPlan.summaryCount == 1,
+            "Summary count must include regular active cues and exclude pinned or cleared cues."
         )
         check(
-            mixedPlan.summaryText == "2 cues, please review.",
-            "Summary text must describe all active cues."
+            mixedPlan.summaryText == "1 cue, please review.",
+            "Summary text must describe regular active cues."
         )
 
         let regularOnlyPlan = ReminderNotificationPlan.fromMemos([regular])
@@ -33,6 +33,16 @@ enum ReminderNotificationPlanTests {
         check(
             regularOnlyPlan.summaryText == "1 cue, please review.",
             "Singular summary text must be correct."
+        )
+
+        let pinnedOnlyPlan = ReminderNotificationPlan.fromMemos([pinned])
+        check(
+            pinnedOnlyPlan.individualMemos.map(\.id) == ["pinned"],
+            "Pinned-only reminders must keep the individual notification."
+        )
+        check(
+            pinnedOnlyPlan.summaryCount == 0,
+            "Pinned-only reminders must not create a summary count."
         )
     }
 

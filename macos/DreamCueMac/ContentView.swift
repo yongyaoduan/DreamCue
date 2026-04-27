@@ -50,6 +50,7 @@ struct ContentView: View {
                         CueDetailSheet(
                             memo: memo,
                             draft: $detailDraft,
+                            showPinAction: store.selectedTab == 0 && memo.isActive,
                             onSave: {
                                 saveDetailAndDismiss(memo)
                             },
@@ -769,6 +770,7 @@ private struct NewCueSheet: View {
 private struct CueDetailSheet: View {
     let memo: Memo
     @Binding var draft: String
+    let showPinAction: Bool
     let onSave: () -> Void
     let onClear: () -> Void
     let onReopen: () -> Void
@@ -803,13 +805,20 @@ private struct CueDetailSheet: View {
             HStack(spacing: 12) {
                 IconActionButton(accessibility: "Delete Cue", assetName: "IconDelete", tint: DreamCueStyle.deleteRed, action: onDelete)
                 if memo.isActive {
+                    if showPinAction {
+                        IconActionButton(
+                            accessibility: memo.pinned ? "Unpin Cue" : "Pin Cue",
+                            assetName: "IconPin",
+                            tint: DreamCueStyle.muted,
+                            action: { onSetPinned(!memo.pinned) }
+                        )
+                    }
                     IconActionButton(
-                        accessibility: memo.pinned ? "Unpin Cue" : "Pin Cue",
-                        assetName: "IconPin",
-                        tint: DreamCueStyle.muted,
-                        action: { onSetPinned(!memo.pinned) }
+                        accessibility: "Complete Cue",
+                        assetName: "IconComplete",
+                        tint: DreamCueStyle.deepGreen,
+                        action: onClear
                     )
-                    IconActionButton(accessibility: "Complete Cue", assetName: "IconComplete", tint: DreamCueStyle.deepGreen, action: onClear)
                 } else {
                     IconActionButton(accessibility: "Return to Today", assetName: "IconReturn", tint: DreamCueStyle.muted, action: onReopen)
                 }
@@ -850,13 +859,6 @@ private struct ReminderTimePickerSheet: View {
         VStack(spacing: 18) {
             Text("Select reminder time")
                 .font(.headline)
-
-            Text(String(format: "%02d:%02d", hour, minute))
-                .font(.title2.monospacedDigit().weight(.semibold))
-                .foregroundStyle(DreamCueStyle.deepGreen)
-                .accessibilityLabel("timePicker.value")
-                .accessibilityValue(String(format: "%02d:%02d", hour, minute))
-                .accessibilityIdentifier("timePicker.value")
 
             HStack(alignment: .center, spacing: 12) {
                 TimeNumberControl(
@@ -1077,16 +1079,11 @@ private struct CueRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 14) {
-            if memo.pinned {
-                RoundedRectangle(cornerRadius: 999)
-                    .fill(DreamCueStyle.gold.opacity(0.38))
-                    .frame(width: 3, height: 42)
-            }
             Text("#\(String(format: "%02d", displayNumber))")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
                 .frame(width: 38, height: 26)
-                .background(memo.pinned ? DreamCueStyle.gold.opacity(0.12) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
+                .background(memo.pinned ? DreamCueStyle.border.opacity(0.26) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 5) {
                 Text(memo.content)
                     .font(.headline)
@@ -1097,11 +1094,6 @@ private struct CueRow: View {
                     .foregroundStyle(DreamCueStyle.muted)
             }
             Spacer()
-            if memo.pinned {
-                Image(systemName: "pin.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(DreamCueStyle.gold)
-            }
             Text(memo.isActive ? "Current" : "Cleared")
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 10)
@@ -1113,7 +1105,7 @@ private struct CueRow: View {
         }
         .padding(14)
         .background(rowBackground, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(memo.pinned ? DreamCueStyle.gold.opacity(0.30) : DreamCueStyle.border, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(memo.pinned ? DreamCueStyle.border.opacity(0.70) : DreamCueStyle.border, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -1135,7 +1127,7 @@ private struct CueRow: View {
             return DreamCueStyle.selected
         }
         if memo.pinned {
-            return DreamCueStyle.border.opacity(0.18)
+            return DreamCueStyle.border.opacity(0.22)
         }
         return DreamCueStyle.panel
     }
@@ -1222,7 +1214,7 @@ private struct ArchiveRow: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(memo.isActive ? DreamCueStyle.deepGreen : DreamCueStyle.gold)
                     .frame(width: 38, height: 24)
-                    .background(memo.pinned ? DreamCueStyle.gold.opacity(0.12) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
+                    .background(memo.pinned ? DreamCueStyle.border.opacity(0.26) : DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(memo.content)
                         .font(.body.weight(.semibold))
@@ -1233,11 +1225,6 @@ private struct ArchiveRow: View {
                         .foregroundStyle(DreamCueStyle.muted)
                 }
                 Spacer()
-                if memo.pinned {
-                    Image(systemName: "pin.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(DreamCueStyle.gold)
-                }
                 Text(memo.isActive ? "Current" : "Cleared")
                     .font(.caption)
                     .foregroundStyle(DreamCueStyle.deepGreen)

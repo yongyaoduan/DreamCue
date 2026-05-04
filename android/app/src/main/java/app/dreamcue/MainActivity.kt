@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
 
         NotificationHelper.ensureChannel(this)
+        NotificationPermissionPolicy.requestIfNeeded(this)
 
         val repository = DreamCueRepository(applicationContext)
         if (repository.reminderEnabled()) {

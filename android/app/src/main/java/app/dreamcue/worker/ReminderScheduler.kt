@@ -4,9 +4,9 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import app.dreamcue.DreamCueRepository
 import app.dreamcue.model.ReminderTime
-import java.util.Calendar
 
 object ReminderScheduler {
     private const val REQUEST_CODE_DAILY_REVIEW = 3401
@@ -16,13 +16,20 @@ object ReminderScheduler {
         val time = reminderTime ?: DreamCueRepository(appContext).reminderTime()
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = reviewPendingIntent(appContext)
-        val triggerAtMillis = nextTriggerAtMillis(time)
+        val triggerAtMillis = ReminderAlarmPolicy.nextTriggerAtMillis(time)
 
-        alarmManager.set(
-            AlarmManager.RTC_WAKEUP,
-            triggerAtMillis,
-            pendingIntent,
-        )
+        when (ReminderAlarmPolicy.deliveryModeForSdk(Build.VERSION.SDK_INT)) {
+            ReminderAlarmDeliveryMode.SET_AND_ALLOW_WHILE_IDLE -> alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent,
+            )
+            ReminderAlarmDeliveryMode.SET -> alarmManager.set(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent,
+            )
+        }
     }
 
     fun cancel(context: Context) {
@@ -41,16 +48,4 @@ object ReminderScheduler {
         )
     }
 
-    private fun nextTriggerAtMillis(reminderTime: ReminderTime): Long {
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            set(Calendar.HOUR_OF_DAY, reminderTime.hour)
-            set(Calendar.MINUTE, reminderTime.minute)
-        }
-        if (calendar.timeInMillis <= System.currentTimeMillis()) {
-            calendar.add(Calendar.DAY_OF_YEAR, 1)
-        }
-        return calendar.timeInMillis
-    }
 }

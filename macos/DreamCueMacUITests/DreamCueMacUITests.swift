@@ -3,6 +3,18 @@ import XCTest
 
 final class DreamCueMacUITests: XCTestCase {
     @objc
+    func testStartupPromptsUnsignedUserToSignInAndAllowsSkipping() {
+        let app = launchIsolatedApp()
+
+        XCTAssertTrue(app.staticTexts["Sign in to sync"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Keep cues private across devices with your DreamCue account."].exists)
+        attachScreenshot("mac-startup-account-reminder-visible", app: app)
+        app.buttons["Skip Sync Sign In"].click()
+        XCTAssertFalse(app.staticTexts["Sign in to sync"].exists)
+        attachScreenshot("mac-startup-account-reminder-skipped", app: app)
+    }
+
+    @objc
     func testSidebarSelectionFillsFullRows() {
         let app = launchIsolatedApp()
 

@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var selectedHour = 21
     @State private var selectedMinute = 0
     @State private var modalDismissGuardUntil = Date.distantPast
+    @State private var startupAccountPromptSkipped = false
 
     var body: some View {
         ZStack {
@@ -133,9 +134,17 @@ struct ContentView: View {
             TodayView(
                 currentMemos: store.currentMemos,
                 reminderTime: store.reminderTimeText,
+                showAccountReminder: !startupAccountPromptSkipped && !store.isSyncActive,
                 onNewCue: presentNewCue,
                 onOpen: openMemo,
-                onMove: store.moveCurrentMemo
+                onMove: store.moveCurrentMemo,
+                onOpenAccount: {
+                    startupAccountPromptSkipped = true
+                    selectTab(3)
+                },
+                onSkipAccountReminder: {
+                    startupAccountPromptSkipped = true
+                }
             )
         case 1:
             ArchiveView(
@@ -243,9 +252,12 @@ private struct AppFocusRestorer: NSViewRepresentable {
 private struct TodayView: View {
     let currentMemos: [Memo]
     let reminderTime: String
+    let showAccountReminder: Bool
     let onNewCue: () -> Void
     let onOpen: (Memo) -> Void
     let onMove: (Int, Int) -> Void
+    let onOpenAccount: () -> Void
+    let onSkipAccountReminder: () -> Void
     @State private var dragPreview: CueDragPreview?
 
     var body: some View {
@@ -271,6 +283,13 @@ private struct TodayView: View {
                     .frame(width: 360)
                     .background(DreamCueStyle.panel, in: RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(DreamCueStyle.border, lineWidth: 1))
+                }
+
+                if showAccountReminder {
+                    StartupAccountReminderPanel(
+                        onOpenAccount: onOpenAccount,
+                        onSkip: onSkipAccountReminder
+                    )
                 }
 
                 Button(action: onNewCue) {
@@ -350,6 +369,43 @@ private struct TodayView: View {
 private struct CueDragPreview: Equatable {
     let sourceIndex: Int
     let targetIndex: Int
+}
+
+private struct StartupAccountReminderPanel: View {
+    let onOpenAccount: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "lock")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(DreamCueStyle.deepGreen)
+                .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Sign in to sync")
+                    .font(.headline)
+                    .foregroundStyle(DreamCueStyle.ink)
+                Text("Keep cues private across devices with your DreamCue account.")
+                    .font(.subheadline)
+                    .foregroundStyle(DreamCueStyle.muted)
+            }
+
+            Spacer()
+
+            Button("Skip", action: onSkip)
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("Skip Sync Sign In")
+
+            Button("Sign In", action: onOpenAccount)
+                .buttonStyle(.borderedProminent)
+                .tint(DreamCueStyle.deepGreen)
+                .accessibilityIdentifier("Open Sync Sign In")
+        }
+        .padding(14)
+        .background(DreamCueStyle.selected, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(DreamCueStyle.border, lineWidth: 1))
+    }
 }
 
 private struct ArchiveView: View {

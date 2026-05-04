@@ -149,6 +149,41 @@ class DreamCueAppTest {
     }
 
     @Test
+    fun startupPromptsUnsignedUserToSignInAndAllowsSkipping() {
+        var state by mutableStateOf(MainUiState())
+        composeRule.setContent {
+            DreamCueApp(
+                state = state,
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = { state = state.copy(selectedScreen = it) },
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onReminderEnabledChange = {},
+            )
+        }
+
+        composeRule.onNodeWithText("Sign in to sync").assertIsDisplayed()
+        composeRule.onNodeWithText("Keep cues private across devices with your DreamCue account.").assertIsDisplayed()
+        composeRule.onNodeWithText("Skip").performClick()
+        assert(composeRule.onAllNodesWithText("Sign in to sync").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun draggingTodayCueReordersRowsAndRenumbersThem() {
         var reordered: Pair<Int, Int>? = null
         var state by mutableStateOf(

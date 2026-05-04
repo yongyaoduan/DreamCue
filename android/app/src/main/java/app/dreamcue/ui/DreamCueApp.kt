@@ -205,8 +205,10 @@ fun DreamCueApp(
 ) {
     var showCaptureSheet by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
+    var startupAccountPromptSkipped by rememberSaveable { mutableStateOf(false) }
     val showArchiveSearchResults =
         state.submittedSearchQuery.isNotBlank() && state.submittedSearchQuery == state.searchQuery
+    val showStartupAccountPrompt = !startupAccountPromptSkipped && state.needsStartupAccountPrompt()
 
     MaterialTheme(
         colorScheme = DreamCueColorScheme,
@@ -251,9 +253,17 @@ fun DreamCueApp(
                     when (state.selectedScreen) {
                         MemoScreen.CURRENT -> TodayScreen(
                             state = state,
+                            showAccountReminder = showStartupAccountPrompt,
                             onOpenCapture = { showCaptureSheet = true },
                             onOpenMemo = onOpenMemoDetail,
                             onReorderCurrentMemos = onReorderCurrentMemos,
+                            onOpenAccount = {
+                                startupAccountPromptSkipped = true
+                                onSelectScreen(MemoScreen.ACCOUNT)
+                            },
+                            onSkipAccountReminder = {
+                                startupAccountPromptSkipped = true
+                            },
                         )
 
                         MemoScreen.HISTORY -> ArchiveScreen(
@@ -341,9 +351,12 @@ fun DreamCueApp(
 @Composable
 private fun TodayScreen(
     state: MainUiState,
+    showAccountReminder: Boolean,
     onOpenCapture: () -> Unit,
     onOpenMemo: (Memo) -> Unit,
     onReorderCurrentMemos: (Int, Int) -> Unit,
+    onOpenAccount: () -> Unit,
+    onSkipAccountReminder: () -> Unit,
 ) {
     var dragPreview by remember { mutableStateOf<CueDragPreview?>(null) }
     val cuePreviewStepPx = with(LocalDensity.current) { 104.dp.toPx() }
@@ -363,6 +376,15 @@ private fun TodayScreen(
         ) {
             item {
                 HomeTopBar()
+            }
+
+            if (showAccountReminder) {
+                item {
+                    StartupAccountReminderPanel(
+                        onOpenAccount = onOpenAccount,
+                        onSkip = onSkipAccountReminder,
+                    )
+                }
             }
 
             if (state.nativeError != null) {
@@ -1513,6 +1535,59 @@ private fun FirstCuePanel(onOpenCapture: () -> Unit) {
 }
 
 @Composable
+private fun StartupAccountReminderPanel(
+    onOpenAccount: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    ElevatedPanel(
+        color = ForestSoft,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 13.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Lock,
+                    contentDescription = null,
+                    tint = Forest,
+                    modifier = Modifier.size(24.dp),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "Sign in to sync",
+                        color = Ink,
+                        fontSize = 16.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Keep cues private across devices with your DreamCue account.",
+                        color = InkSoft,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+            ) {
+                SecondaryButton(text = "Skip", onClick = onSkip)
+                PrimaryButton(text = "Sign In", onClick = onOpenAccount)
+            }
+        }
+    }
+}
+
+@Composable
 private fun SyncHealthPanel() {
     ElevatedPanel(
         color = Porcelain,
@@ -1703,6 +1778,13 @@ private fun accountSyncStatusLabel(syncStatus: String): String {
     } else {
         syncStatus
     }
+}
+
+private fun MainUiState.needsStartupAccountPrompt(): Boolean {
+    return syncEmail.isBlank() &&
+        !syncStatus.startsWith("Syncing as ") &&
+        syncStatus != "Sync account signed in." &&
+        syncStatus != "Sync account created."
 }
 
 @Composable

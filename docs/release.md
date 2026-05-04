@@ -97,7 +97,7 @@ Keep keystores, `.p12` files, Firebase local properties, and admin SDK keys out 
 Build the macOS release zip locally:
 
 ```bash
-DREAMCUE_RELEASE_VERSION=v1.2.8 ./scripts/build-macos-release.sh
+DREAMCUE_RELEASE_VERSION=v1.2.9 ./scripts/build-macos-release.sh
 ```
 
 Build the Android release APK locally:

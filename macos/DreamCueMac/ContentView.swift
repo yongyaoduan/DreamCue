@@ -1264,7 +1264,7 @@ private struct CueRow: View {
     private func scheduleIdleDragCleanup() {
         dragActivationSerial += 1
         let currentSerial = dragActivationSerial
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             guard dragActivationSerial == currentSerial, isDragging, !hasMovedAfterLongPress else { return }
             resetDragState()
         }

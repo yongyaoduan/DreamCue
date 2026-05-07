@@ -33,6 +33,14 @@ interface MemoSyncCoordinator {
         onStatus: (String) -> Unit,
         onRemoteChange: () -> Unit,
     )
+    fun syncNow(
+        onStatus: (String) -> Unit,
+        onRemoteChange: () -> Unit,
+    )
+    fun sendPasswordReset(
+        email: String,
+        onStatus: (String) -> Unit,
+    )
     fun signOut(onStatus: (String) -> Unit)
     fun uploadAll(memos: List<Memo>)
     fun uploadDeletedMemo(memoId: String, deletedAtMs: Long = System.currentTimeMillis())
@@ -138,6 +146,59 @@ class FirebaseSyncCoordinator(
             }
             .addOnFailureListener { error ->
                 onStatus(firebaseSyncFailureMessage(error, "Sync account creation failed."))
+            }
+    }
+
+    override fun syncNow(
+        onStatus: (String) -> Unit,
+        onRemoteChange: () -> Unit,
+    ) {
+        val auth = authOrNull()
+        val database = databaseOrNull()
+        if (auth == null || database == null) {
+            onStatus("Firebase sync is not configured.")
+            return
+        }
+
+        val user = auth.currentUser
+        if (user == null) {
+            onStatus("Sign in to sync across devices.")
+            return
+        }
+
+        val reference = database.getReference(FirebaseTenantPaths.memoCollectionPath(user.uid))
+        reference.get()
+            .addOnSuccessListener { snapshot ->
+                runCatching {
+                    repository.initialize().getOrThrow()
+                    applyRemoteSnapshot(snapshot)
+                }.onFailure { failure ->
+                    onStatus(failure.message ?: "Manual sync failed.")
+                    return@addOnSuccessListener
+                }
+                onStatus("Syncing as ${user.email ?: user.uid}.")
+                onRemoteChange()
+            }
+            .addOnFailureListener { error ->
+                onStatus(error.message ?: "Manual sync failed.")
+            }
+    }
+
+    override fun sendPasswordReset(
+        email: String,
+        onStatus: (String) -> Unit,
+    ) {
+        val auth = authOrNull()
+        if (auth == null) {
+            onStatus("Firebase sync is not configured.")
+            return
+        }
+        auth.sendPasswordResetEmail(email.trim())
+            .addOnSuccessListener {
+                onStatus("Password reset email sent.")
+            }
+            .addOnFailureListener { error ->
+                onStatus(firebasePasswordResetFailureMessage(error))
             }
     }
 
@@ -256,5 +317,16 @@ internal fun firebaseSyncFailureMessage(error: Throwable, fallback: String): Str
             "Email or password is incorrect."
         rawMessage.isNotBlank() -> rawMessage
         else -> fallback
+    }
+}
+
+internal fun firebasePasswordResetFailureMessage(error: Throwable): String {
+    val rawMessage = error.message.orEmpty()
+    return when {
+        rawMessage.contains("CONFIGURATION_NOT_FOUND") ->
+            "Sync account setup is not available yet."
+        rawMessage.contains("INVALID_EMAIL") ->
+            "Enter a valid email address."
+        else -> "Password reset email could not be sent."
     }
 }

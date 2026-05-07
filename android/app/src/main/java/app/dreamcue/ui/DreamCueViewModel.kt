@@ -164,6 +164,33 @@ class DreamCueViewModel(
         uiState = uiState.copy(syncPassword = "")
     }
 
+    fun syncNow() {
+        syncCoordinator.syncNow(
+            onStatus = ::updateSyncStatus,
+            onRemoteChange = { refresh(uploadAfterLoad = true) },
+        )
+    }
+
+    fun resetSyncPassword() {
+        val signedInEmail = syncCoordinator.currentEmail().trim()
+        val email = uiState.syncEmail.ifBlank { signedInEmail }.trim()
+        if (email.isBlank()) {
+            uiState = uiState.copy(syncStatus = "Enter an email address.")
+            return
+        }
+
+        syncCoordinator.sendPasswordReset(
+            email = email,
+            onStatus = { status ->
+                if (status == "Password reset email sent." && signedInEmail.isNotBlank()) {
+                    updateSyncStatus("Syncing as $signedInEmail. Password reset email sent.")
+                } else {
+                    updateSyncStatus(status)
+                }
+            },
+        )
+    }
+
     fun openMemoDetail(memo: Memo) {
         detailAutoSaveJob?.cancel()
         uiState = uiState.copy(

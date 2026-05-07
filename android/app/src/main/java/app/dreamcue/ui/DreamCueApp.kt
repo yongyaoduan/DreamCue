@@ -199,6 +199,8 @@ fun DreamCueApp(
     onSignInSync: () -> Unit,
     onCreateSyncAccount: () -> Unit,
     onSignOutSync: () -> Unit,
+    onSyncNow: () -> Unit = {},
+    onResetSyncPassword: () -> Unit = {},
     onReminderEnabledChange: (Boolean) -> Unit,
     onReorderCurrentMemos: (Int, Int) -> Unit = { _, _ -> },
     onSetMemoPinned: (String, Boolean) -> Unit = { _, _ -> },
@@ -287,6 +289,8 @@ fun DreamCueApp(
                             onSignInSync = onSignInSync,
                             onCreateSyncAccount = onCreateSyncAccount,
                             onSignOutSync = onSignOutSync,
+                            onSyncNow = onSyncNow,
+                            onResetSyncPassword = onResetSyncPassword,
                         )
                     }
                 }
@@ -671,10 +675,12 @@ private fun AccountScreen(
     onSignInSync: () -> Unit,
     onCreateSyncAccount: () -> Unit,
     onSignOutSync: () -> Unit,
+    onSyncNow: () -> Unit,
+    onResetSyncPassword: () -> Unit,
 ) {
-    val signedIn = state.syncStatus.startsWith("Syncing as ") ||
-        state.syncStatus == "Sync account signed in." ||
-        state.syncStatus == "Sync account created."
+    val signedIn = state.hasSignedInSyncAccount()
+    val signedInEmail = state.syncEmail.ifBlank { "Signed in" }
+    val statusText = accountSyncStatusLabel(state.syncStatus)
 
     LazyColumn(
         modifier = Modifier
@@ -692,8 +698,10 @@ private fun AccountScreen(
         if (signedIn) {
             item {
                 ConnectedAccountPanel(
-                    email = state.syncEmail.ifBlank { "Signed in" },
-                    syncStatus = state.syncStatus,
+                    email = signedInEmail,
+                    syncStatus = statusText,
+                    onSyncNow = onSyncNow,
+                    onResetSyncPassword = onResetSyncPassword,
                     onSignOutSync = onSignOutSync,
                 )
             }
@@ -744,6 +752,11 @@ private fun AccountScreen(
                             modifier = Modifier.weight(1f),
                         )
                     }
+                    SecondaryButton(
+                        text = "Reset Password",
+                        onClick = onResetSyncPassword,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
 
@@ -756,6 +769,12 @@ private fun AccountScreen(
             }
         }
     }
+}
+
+private fun MainUiState.hasSignedInSyncAccount(): Boolean {
+    return syncStatus.startsWith("Syncing as ") ||
+        syncStatus == "Sync account signed in." ||
+        syncStatus == "Sync account created."
 }
 
 @Composable
@@ -1680,10 +1699,11 @@ private fun PermissionLine(label: String, value: String) {
 private fun ConnectedAccountPanel(
     email: String,
     syncStatus: String,
+    onSyncNow: () -> Unit,
+    onResetSyncPassword: () -> Unit,
     onSignOutSync: () -> Unit,
 ) {
     val displayEmail = compactAccountEmail(email)
-    val displayStatus = accountSyncStatusLabel(syncStatus)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1708,7 +1728,7 @@ private fun ConnectedAccountPanel(
                     modifier = Modifier.padding(top = 10.dp),
                 )
                 Text(
-                    text = displayStatus,
+                    text = syncStatus,
                     color = Porcelain.copy(alpha = 0.72f),
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -1738,12 +1758,33 @@ private fun ConnectedAccountPanel(
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
-                OutlinedButton(
-                    onClick = onSignOutSync,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
-                    border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End,
                 ) {
-                    Text("Sign Out")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = onResetSyncPassword,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
+                            border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
+                        ) {
+                            Text("Reset Password")
+                        }
+                        OutlinedButton(
+                            onClick = onSyncNow,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
+                            border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
+                        ) {
+                            Text("Sync Now")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onSignOutSync,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
+                        border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
+                    ) {
+                        Text("Sign Out")
+                    }
                 }
             }
         }
@@ -1769,7 +1810,9 @@ private fun compactAccountEmail(email: String): String {
 }
 
 private fun accountSyncStatusLabel(syncStatus: String): String {
-    return if (
+    return if (syncStatus.contains("Password reset email sent.")) {
+        "Password reset email sent."
+    } else if (
         syncStatus.startsWith("Syncing as ") ||
         syncStatus == "Sync account signed in." ||
         syncStatus == "Sync account created."

@@ -52,6 +52,22 @@ final class FirebaseRestSyncService {
         )
     }
 
+    func sendPasswordReset(email: String) async throws {
+        guard !apiKey.isEmpty else {
+            throw SyncError.missingFirebaseConfig
+        }
+        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=\(apiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try firebasePasswordResetRequestBody(email: email)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw SyncError.authenticationFailed(firebasePasswordResetFailureMessage(data: data))
+        }
+    }
+
     func restoreSession() async throws -> String? {
         guard let persisted = sessionStore.load() else { return nil }
         let refreshed = try await refreshSession(persisted)
@@ -262,6 +278,29 @@ func firebaseAuthFailureMessage(data: Data, fallback: String) -> String {
         return "Email or password is incorrect."
     }
     return fallback
+}
+
+func firebasePasswordResetRequestBody(email: String) throws -> Data {
+    try JSONSerialization.data(withJSONObject: [
+        "requestType": "PASSWORD_RESET",
+        "email": email.trimmingCharacters(in: .whitespacesAndNewlines),
+    ])
+}
+
+func firebasePasswordResetFailureMessage(data: Data) -> String {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let error = root["error"] as? [String: Any],
+          let message = error["message"] as? String
+    else {
+        return "Password reset email could not be sent."
+    }
+    if message.contains("INVALID_EMAIL") {
+        return "Enter a valid email address."
+    }
+    if message.contains("CONFIGURATION_NOT_FOUND") {
+        return "Sync account setup is not available yet."
+    }
+    return "Password reset email could not be sent."
 }
 
 func firebaseAuthenticatedSession(data: Data, email: String, fallback: String) throws -> FirebaseAuthenticatedSession {

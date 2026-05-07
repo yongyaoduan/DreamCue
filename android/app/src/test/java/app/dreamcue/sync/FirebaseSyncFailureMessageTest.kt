@@ -32,4 +32,20 @@ class FirebaseSyncFailureMessageTest {
             firebaseSyncFailureMessage(RuntimeException("[ INVALID_LOGIN_CREDENTIALS ]"), "Sync sign-in failed."),
         )
     }
+
+    @Test
+    fun mapsPasswordResetErrorsToUserFacingStatus() {
+        assertEquals(
+            "Enter a valid email address.",
+            firebasePasswordResetFailureMessage(RuntimeException("[ INVALID_EMAIL ]")),
+        )
+        assertEquals(
+            "Sync account setup is not available yet.",
+            firebasePasswordResetFailureMessage(RuntimeException("[ CONFIGURATION_NOT_FOUND ]")),
+        )
+        assertEquals(
+            "Password reset email could not be sent.",
+            firebasePasswordResetFailureMessage(RuntimeException("[ EMAIL_NOT_FOUND ]")),
+        )
+    }
 }

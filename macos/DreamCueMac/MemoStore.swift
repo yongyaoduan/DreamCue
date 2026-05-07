@@ -230,6 +230,40 @@ final class MemoStore: ObservableObject {
         syncStatus = "Sync account signed out."
     }
 
+    func syncNow() {
+        guard isSyncActive else {
+            syncStatus = "Sign in to sync across devices."
+            return
+        }
+
+        syncStatus = "Syncing now."
+        Task {
+            await pullAndUpload()
+            syncStatus = "Syncing as \(signedInEmail)."
+        }
+    }
+
+    func resetPassword() {
+        let email = syncDisplayEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty else {
+            syncStatus = "Enter an email address."
+            return
+        }
+
+        Task {
+            do {
+                try await syncService.sendPasswordReset(email: email)
+                if isSyncActive {
+                    syncStatus = "Syncing as \(signedInEmail). Password reset email sent."
+                } else {
+                    syncStatus = "Password reset email sent."
+                }
+            } catch {
+                syncStatus = error.localizedDescription
+            }
+        }
+    }
+
     func setReminderTime(hour: Int, minute: Int) {
         reminderHour = hour
         reminderMinute = minute

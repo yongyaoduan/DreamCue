@@ -6,6 +6,7 @@ enum FirebaseSessionPersistenceTests {
         testKeychainSessionRoundTripAndClear()
         testSignInResponseKeepsRefreshTokenForRestore()
         testRefreshResponseKeepsReplacementRefreshToken()
+        testPasswordResetRequestBodyUsesEmailOobCode()
     }
 
     private static func testKeychainSessionRoundTripAndClear() {
@@ -67,6 +68,18 @@ enum FirebaseSessionPersistenceTests {
         check(session.userId == "uid-123", "Refreshed session must keep the Firebase uid.")
         check(session.idToken == "id-token-456", "Refreshed session must keep the refreshed id token.")
         check(session.refreshToken == "refresh-token-456", "Refreshed session must keep the replacement refresh token.")
+    }
+
+    private static func testPasswordResetRequestBodyUsesEmailOobCode() {
+        let data = tryValue(try firebasePasswordResetRequestBody(email: "owner@example.com"))
+        let raw = tryValue(try JSONSerialization.jsonObject(with: data))
+        guard let root = raw as? [String: Any] else {
+            check(false, "Password reset body must be a JSON object.")
+            return
+        }
+
+        check(root["requestType"] as? String == "PASSWORD_RESET", "Password reset must use Firebase password reset OOB flow.")
+        check(root["email"] as? String == "owner@example.com", "Password reset must target the requested email.")
     }
 
     private static func jsonData(_ object: [String: Any]) -> Data {

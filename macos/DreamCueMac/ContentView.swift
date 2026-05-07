@@ -174,7 +174,9 @@ struct ContentView: View {
                 isSyncActive: store.isSyncActive,
                 onSignIn: store.signIn,
                 onCreate: store.createAccount,
-                onSignOut: store.signOut
+                onSignOut: store.signOut,
+                onSyncNow: store.syncNow,
+                onResetPassword: store.resetPassword
             )
         }
     }
@@ -523,6 +525,8 @@ private struct AccountView: View {
     let onSignIn: () -> Void
     let onCreate: () -> Void
     let onSignOut: () -> Void
+    let onSyncNow: () -> Void
+    let onResetPassword: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -569,6 +573,8 @@ private struct AccountView: View {
                     .buttonStyle(SecondaryButtonStyle())
                 Button("Sign In", action: onSignIn)
                     .buttonStyle(PrimaryButtonStyle())
+                Button("Reset Password", action: onResetPassword)
+                    .buttonStyle(SecondaryButtonStyle())
             }
         }
         .padding(20)
@@ -589,6 +595,9 @@ private struct AccountView: View {
                     .font(.system(size: 24, weight: .bold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
+            Text(accountSyncStatusLabel(syncStatus))
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.72))
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Last sync")
@@ -597,8 +606,14 @@ private struct AccountView: View {
                         .font(.headline)
                 }
                 Spacer()
-                Button("Sign Out", action: onSignOut)
-                    .buttonStyle(DarkOutlineButtonStyle())
+                HStack(spacing: 10) {
+                    Button("Reset Password", action: onResetPassword)
+                        .buttonStyle(DarkOutlineButtonStyle())
+                    Button("Sync Now", action: onSyncNow)
+                        .buttonStyle(DarkOutlineButtonStyle())
+                    Button("Sign Out", action: onSignOut)
+                        .buttonStyle(DarkOutlineButtonStyle())
+                }
             }
         }
         .foregroundStyle(.white)
@@ -607,6 +622,18 @@ private struct AccountView: View {
         .background(DreamCueStyle.deepGreen, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
     }
+}
+
+private func accountSyncStatusLabel(_ syncStatus: String) -> String {
+    if syncStatus.contains("Password reset email sent.") {
+        return "Password reset email sent."
+    }
+    if syncStatus.hasPrefix("Syncing as ") ||
+        syncStatus == "Sync account signed in." ||
+        syncStatus == "Sync account created." {
+        return "Realtime sync is active."
+    }
+    return syncStatus
 }
 
 private struct ModalSurface<Content: View>: View {

@@ -142,6 +142,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Password").assertIsDisplayed()
         composeRule.onNodeWithText("Create").assertIsDisplayed()
         composeRule.onNodeWithText("Sign In").assertIsDisplayed()
+        composeRule.onNodeWithText("Reset Password").assertIsDisplayed()
         composeRule.onNodeWithText("Private sync").assertIsDisplayed()
         composeRule.onNodeWithText("Only your signed-in account can access synced cues.")
             .assertIsDisplayed()
@@ -608,6 +609,7 @@ class DreamCueAppTest {
         composeRule.onNodeWithText("Email").assertIsDisplayed()
         composeRule.onNodeWithText("Password").assertIsDisplayed()
         composeRule.onNodeWithText("Sign In").assertIsDisplayed()
+        composeRule.onNodeWithText("Reset Password").assertIsDisplayed()
     }
 
     @Test
@@ -1008,6 +1010,8 @@ class DreamCueAppTest {
     @Test
     fun signedInAccountShowsPrivateSyncElements() {
         var signedOut = false
+        var syncedNow = false
+        var resetPassword = false
         val email = "qa@example.com"
         composeRule.setContent {
             DreamCueApp(
@@ -1035,6 +1039,8 @@ class DreamCueAppTest {
                 onSignInSync = {},
                 onCreateSyncAccount = {},
                 onSignOutSync = { signedOut = true },
+                onSyncNow = { syncedNow = true },
+                onResetSyncPassword = { resetPassword = true },
                 onReminderEnabledChange = {},
             )
         }
@@ -1048,8 +1054,12 @@ class DreamCueAppTest {
         assert(composeRule.onAllNodesWithText("Remote path").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("users/{uid}/memos").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Pending uploads").fetchSemanticsNodes().isEmpty())
+        composeRule.onNodeWithText("Reset Password").performClick()
+        composeRule.onNodeWithText("Sync Now").performClick()
         composeRule.onNodeWithText("Sign Out").performClick()
 
+        assert(resetPassword)
+        assert(syncedNow)
         assert(signedOut)
     }
 

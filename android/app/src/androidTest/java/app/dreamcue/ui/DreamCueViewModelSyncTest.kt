@@ -118,6 +118,31 @@ class DreamCueViewModelSyncTest {
     }
 
     @Test
+    fun manualSyncRefreshesAndUploadsLocalMemosAfterRemoteLoad() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.filesDir, "dreamcue.sqlite3").delete()
+        DreamCueRepository(context).also { seededRepository ->
+            seededRepository.initialize().getOrThrow()
+            seededRepository.addMemo("local cue for manual sync")
+            seededRepository.dispose()
+        }
+
+        val repository = DreamCueRepository(context)
+        val syncCoordinator = RecordingSyncCoordinator(currentEmail = "owner@example.com")
+        val viewModel = DreamCueViewModel(repository, syncCoordinator)
+
+        waitUntil { !viewModel.uiState.isLoading && viewModel.uiState.nativeReady }
+        syncCoordinator.uploadedMemos.clear()
+        viewModel.syncNow()
+
+        waitUntil {
+            syncCoordinator.syncNowRequests == 1 &&
+                syncCoordinator.uploadedMemos.any { it.content == "local cue for manual sync" }
+        }
+        repository.dispose()
+    }
+
+    @Test
     fun createAccountWithCurrentEmailShowsExistingAccountStatus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         File(context.filesDir, "dreamcue.sqlite3").delete()
@@ -132,6 +157,38 @@ class DreamCueViewModelSyncTest {
 
         assertTrue(syncCoordinator.createdAccounts.isEmpty())
         assertTrue(viewModel.uiState.syncStatus == "An account already exists for this email.")
+        repository.dispose()
+    }
+
+    @Test
+    fun passwordResetRequiresEmailAddress() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.filesDir, "dreamcue.sqlite3").delete()
+        val repository = DreamCueRepository(context)
+        val syncCoordinator = RecordingSyncCoordinator()
+        val viewModel = DreamCueViewModel(repository, syncCoordinator)
+
+        waitUntil { !viewModel.uiState.isLoading && viewModel.uiState.nativeReady }
+        viewModel.resetSyncPassword()
+
+        assertTrue(syncCoordinator.passwordResetEmails.isEmpty())
+        assertTrue(viewModel.uiState.syncStatus == "Enter an email address.")
+        repository.dispose()
+    }
+
+    @Test
+    fun passwordResetSendsTrimmedEmailAddress() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.filesDir, "dreamcue.sqlite3").delete()
+        val repository = DreamCueRepository(context)
+        val syncCoordinator = RecordingSyncCoordinator()
+        val viewModel = DreamCueViewModel(repository, syncCoordinator)
+
+        waitUntil { !viewModel.uiState.isLoading && viewModel.uiState.nativeReady }
+        viewModel.updateSyncEmail(" owner@example.com ")
+        viewModel.resetSyncPassword()
+
+        assertTrue(syncCoordinator.passwordResetEmails == listOf("owner@example.com"))
         repository.dispose()
     }
 
@@ -152,6 +209,8 @@ private class RecordingSyncCoordinator(
 ) : MemoSyncCoordinator {
     val uploadedMemos = mutableListOf<Memo>()
     val createdAccounts = mutableListOf<Pair<String, String>>()
+    val passwordResetEmails = mutableListOf<String>()
+    var syncNowRequests = 0
     private var onRemoteChange: (() -> Unit)? = null
 
     override fun currentEmail(): String = currentEmail
@@ -180,6 +239,23 @@ private class RecordingSyncCoordinator(
     ) {
         this.onRemoteChange = onRemoteChange
         createdAccounts += email to password
+    }
+
+    override fun syncNow(
+        onStatus: (String) -> Unit,
+        onRemoteChange: () -> Unit,
+    ) {
+        syncNowRequests += 1
+        this.onRemoteChange = onRemoteChange
+        onRemoteChange()
+    }
+
+    override fun sendPasswordReset(
+        email: String,
+        onStatus: (String) -> Unit,
+    ) {
+        passwordResetEmails += email
+        onStatus("Password reset email sent.")
     }
 
     override fun signOut(onStatus: (String) -> Unit) = Unit

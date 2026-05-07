@@ -26,6 +26,22 @@ enum SyncAccountPolicyTests {
             ) == "An account already exists for this email.",
             "Firebase EMAIL_EXISTS must use a clear existing-account message."
         )
+        check(
+            firebasePasswordResetFailureMessage(
+                data: Data("""
+                {"error":{"message":"INVALID_EMAIL"}}
+                """.utf8)
+            ) == "Enter a valid email address.",
+            "Firebase INVALID_EMAIL must use a clear password reset message."
+        )
+        check(
+            firebasePasswordResetFailureMessage(
+                data: Data("""
+                {"error":{"message":"EMAIL_NOT_FOUND"}}
+                """.utf8)
+            ) == "Password reset email could not be sent.",
+            "Password reset failures must not mention an incorrect password."
+        )
     }
 
     private static func check(_ condition: @autoclosure () -> Bool, _ message: String) {

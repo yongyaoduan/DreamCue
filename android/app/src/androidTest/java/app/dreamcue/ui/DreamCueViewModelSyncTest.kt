@@ -74,6 +74,50 @@ class DreamCueViewModelSyncTest {
     }
 
     @Test
+    fun startupRefreshDoesNotUploadLocalMemosBeforeRemoteSnapshot() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.filesDir, "dreamcue.sqlite3").delete()
+        DreamCueRepository(context).also { seededRepository ->
+            seededRepository.initialize().getOrThrow()
+            seededRepository.addMemo("local stale cue")
+            seededRepository.dispose()
+        }
+
+        val repository = DreamCueRepository(context)
+        val syncCoordinator = RecordingSyncCoordinator(currentEmail = "owner@example.com")
+        val viewModel = DreamCueViewModel(repository, syncCoordinator)
+
+        waitUntil { !viewModel.uiState.isLoading && viewModel.uiState.nativeReady }
+
+        assertTrue(syncCoordinator.uploadedMemos.isEmpty())
+        repository.dispose()
+    }
+
+    @Test
+    fun remoteSnapshotRefreshUploadsLocalMemosAfterMerge() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        File(context.filesDir, "dreamcue.sqlite3").delete()
+        DreamCueRepository(context).also { seededRepository ->
+            seededRepository.initialize().getOrThrow()
+            seededRepository.addMemo("local cue after remote snapshot")
+            seededRepository.dispose()
+        }
+
+        val repository = DreamCueRepository(context)
+        val syncCoordinator = RecordingSyncCoordinator(currentEmail = "owner@example.com")
+        val viewModel = DreamCueViewModel(repository, syncCoordinator)
+
+        waitUntil { !viewModel.uiState.isLoading && viewModel.uiState.nativeReady }
+        syncCoordinator.uploadedMemos.clear()
+        syncCoordinator.triggerRemoteChange()
+
+        waitUntil {
+            syncCoordinator.uploadedMemos.any { it.content == "local cue after remote snapshot" }
+        }
+        repository.dispose()
+    }
+
+    @Test
     fun createAccountWithCurrentEmailShowsExistingAccountStatus() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         File(context.filesDir, "dreamcue.sqlite3").delete()
@@ -108,20 +152,25 @@ private class RecordingSyncCoordinator(
 ) : MemoSyncCoordinator {
     val uploadedMemos = mutableListOf<Memo>()
     val createdAccounts = mutableListOf<Pair<String, String>>()
+    private var onRemoteChange: (() -> Unit)? = null
 
     override fun currentEmail(): String = currentEmail
 
     override fun start(
         onStatus: (String) -> Unit,
         onRemoteChange: () -> Unit,
-    ) = Unit
+    ) {
+        this.onRemoteChange = onRemoteChange
+    }
 
     override fun signIn(
         email: String,
         password: String,
         onStatus: (String) -> Unit,
         onRemoteChange: () -> Unit,
-    ) = Unit
+    ) {
+        this.onRemoteChange = onRemoteChange
+    }
 
     override fun createAccount(
         email: String,
@@ -129,6 +178,7 @@ private class RecordingSyncCoordinator(
         onStatus: (String) -> Unit,
         onRemoteChange: () -> Unit,
     ) {
+        this.onRemoteChange = onRemoteChange
         createdAccounts += email to password
     }
 
@@ -141,4 +191,8 @@ private class RecordingSyncCoordinator(
     override fun uploadDeletedMemo(memoId: String, deletedAtMs: Long) = Unit
 
     override fun stop() = Unit
+
+    fun triggerRemoteChange() {
+        onRemoteChange?.invoke()
+    }
 }

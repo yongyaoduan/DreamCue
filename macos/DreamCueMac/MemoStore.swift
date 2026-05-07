@@ -11,6 +11,7 @@ final class MemoStore: ObservableObject {
     @Published var syncPassword = ""
     @Published var syncStatus = "Sign in to sync across devices."
     @Published private(set) var signedInEmail = ""
+    @Published private(set) var hasSavedSyncSession = false
     @Published var dailyReminderEnabled = true
     @Published var reminderHour = 21
     @Published var reminderMinute = 0
@@ -46,6 +47,7 @@ final class MemoStore: ObservableObject {
             syncStatus = "Sync account signed in."
         }
         syncReminderNotifications(requestAuthorization: false)
+        restoreSavedSyncSession()
     }
 
     var currentMemos: [Memo] {
@@ -182,6 +184,7 @@ final class MemoStore: ObservableObject {
             do {
                 try await syncService.signIn(email: email, password: password)
                 signedInEmail = email
+                hasSavedSyncSession = true
                 syncStatus = "Sync account signed in."
                 await pullAndUpload()
                 startPolling()
@@ -207,6 +210,7 @@ final class MemoStore: ObservableObject {
             do {
                 try await syncService.createAccount(email: email, password: password)
                 signedInEmail = email
+                hasSavedSyncSession = true
                 syncStatus = "Sync account created."
                 await pullAndUpload()
                 startPolling()
@@ -222,6 +226,7 @@ final class MemoStore: ObservableObject {
         syncService.signOut()
         syncPassword = ""
         signedInEmail = ""
+        hasSavedSyncSession = false
         syncStatus = "Sync account signed out."
     }
 
@@ -327,6 +332,30 @@ final class MemoStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(8))
                 await self?.pullAndUpload()
+            }
+        }
+    }
+
+    private func restoreSavedSyncSession() {
+        let savedEmail = syncService.savedEmail
+        guard !savedEmail.isEmpty else { return }
+        hasSavedSyncSession = true
+        syncEmail = savedEmail
+        syncStatus = "Restoring sync account."
+        Task {
+            do {
+                if let email = try await syncService.restoreSession() {
+                    signedInEmail = email
+                    syncEmail = email
+                    hasSavedSyncSession = true
+                    syncStatus = "Syncing as \(email)."
+                    await pullAndUpload()
+                    startPolling()
+                }
+            } catch {
+                signedInEmail = ""
+                hasSavedSyncSession = false
+                syncStatus = error.localizedDescription
             }
         }
     }

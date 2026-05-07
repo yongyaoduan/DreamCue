@@ -2,21 +2,36 @@ import Foundation
 
 final class FirebaseRestSyncService {
     private struct Session {
+        let email: String
         let userId: String
         let idToken: String
+        let refreshToken: String
+
+        init(authenticatedSession: FirebaseAuthenticatedSession) {
+            email = authenticatedSession.email
+            userId = authenticatedSession.userId
+            idToken = authenticatedSession.idToken
+            refreshToken = authenticatedSession.refreshToken
+        }
     }
 
     private let projectId: String
     private let apiKey: String
     private let databaseURL: String
+    private let sessionStore: FirebaseSyncSessionStore
     private var session: Session?
 
-    init() {
+    init(sessionStore: FirebaseSyncSessionStore = .shared) {
+        self.sessionStore = sessionStore
         let config = Bundle.main.url(forResource: "FirebaseConfig", withExtension: "plist")
             .flatMap { NSDictionary(contentsOf: $0) as? [String: String] } ?? [:]
         projectId = config["ProjectID"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         apiKey = config["APIKey"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         databaseURL = config["DatabaseURL"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    var savedEmail: String {
+        session?.email ?? sessionStore.load()?.email ?? ""
     }
 
     func signIn(email: String, password: String) async throws {
@@ -37,8 +52,17 @@ final class FirebaseRestSyncService {
         )
     }
 
+    func restoreSession() async throws -> String? {
+        guard let persisted = sessionStore.load() else { return nil }
+        let refreshed = try await refreshSession(persisted)
+        session = Session(authenticatedSession: refreshed)
+        sessionStore.save(refreshed.persistedSession)
+        return refreshed.email
+    }
+
     func signOut() {
         session = nil
+        sessionStore.clear()
     }
 
     func uploadMemos(_ memos: [Memo]) async {
@@ -91,13 +115,34 @@ final class FirebaseRestSyncService {
         guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
             throw SyncError.authenticationFailed(firebaseAuthFailureMessage(data: data, fallback: fallback))
         }
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let userId = root["localId"] as? String,
-              let idToken = root["idToken"] as? String
-        else {
-            throw SyncError.authenticationFailed(fallback)
+        let authenticatedSession = try firebaseAuthenticatedSession(data: data, email: email, fallback: fallback)
+        sessionStore.save(authenticatedSession.persistedSession)
+        return Session(authenticatedSession: authenticatedSession)
+    }
+
+    private func refreshSession(_ persisted: PersistedFirebaseSyncSession) async throws -> FirebaseAuthenticatedSession {
+        guard !apiKey.isEmpty else {
+            throw SyncError.missingFirebaseConfig
         }
-        return Session(userId: userId, idToken: idToken)
+        let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = formURLEncodedBody([
+            "grant_type": "refresh_token",
+            "refresh_token": persisted.refreshToken,
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            sessionStore.clear()
+            throw SyncError.authenticationFailed(firebaseAuthFailureMessage(data: data, fallback: "Sync sign-in expired."))
+        }
+        return try firebaseRefreshedSession(
+            data: data,
+            email: persisted.email,
+            fallback: "Sync sign-in expired."
+        )
     }
 
     private func uploadMemo(_ memo: Memo) async {
@@ -157,6 +202,21 @@ final class FirebaseRestSyncService {
     }
 }
 
+struct FirebaseAuthenticatedSession: Equatable {
+    let email: String
+    let userId: String
+    let idToken: String
+    let refreshToken: String
+
+    var persistedSession: PersistedFirebaseSyncSession {
+        PersistedFirebaseSyncSession(
+            email: email,
+            userId: userId,
+            refreshToken: refreshToken
+        )
+    }
+}
+
 private enum SyncError: LocalizedError {
     case missingFirebaseConfig
     case authenticationFailed(String)
@@ -202,6 +262,50 @@ func firebaseAuthFailureMessage(data: Data, fallback: String) -> String {
         return "Email or password is incorrect."
     }
     return fallback
+}
+
+func firebaseAuthenticatedSession(data: Data, email: String, fallback: String) throws -> FirebaseAuthenticatedSession {
+    guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let userId = root["localId"] as? String,
+          let idToken = root["idToken"] as? String,
+          let refreshToken = root["refreshToken"] as? String
+    else {
+        throw SyncError.authenticationFailed(fallback)
+    }
+    return FirebaseAuthenticatedSession(
+        email: email,
+        userId: userId,
+        idToken: idToken,
+        refreshToken: refreshToken
+    )
+}
+
+func firebaseRefreshedSession(data: Data, email: String, fallback: String) throws -> FirebaseAuthenticatedSession {
+    guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let userId = root["user_id"] as? String,
+          let idToken = root["id_token"] as? String,
+          let refreshToken = root["refresh_token"] as? String
+    else {
+        throw SyncError.authenticationFailed(fallback)
+    }
+    return FirebaseAuthenticatedSession(
+        email: email,
+        userId: userId,
+        idToken: idToken,
+        refreshToken: refreshToken
+    )
+}
+
+private func formURLEncodedBody(_ fields: [String: String]) -> Data {
+    let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+    let body = fields
+        .map { key, value in
+            let escapedKey = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
+            let escapedValue = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+            return "\(escapedKey)=\(escapedValue)"
+        }
+        .joined(separator: "&")
+    return Data(body.utf8)
 }
 
 private func intField(_ value: Any?) -> Int64? {

@@ -135,7 +135,7 @@ class DreamCueViewModel(
             email = email,
             password = password,
             onStatus = ::updateSyncStatus,
-            onRemoteChange = ::refresh,
+            onRemoteChange = { refresh(uploadAfterLoad = true) },
         )
     }
 
@@ -155,7 +155,7 @@ class DreamCueViewModel(
             email = email,
             password = password,
             onStatus = ::updateSyncStatus,
-            onRemoteChange = ::refresh,
+            onRemoteChange = { refresh(uploadAfterLoad = true) },
         )
     }
 
@@ -197,7 +197,7 @@ class DreamCueViewModel(
         uiState = uiState.copy(pendingDeleteMemo = null)
     }
 
-    fun refresh() {
+    fun refresh(uploadAfterLoad: Boolean = false) {
         val submittedSearchQuery = uiState.submittedSearchQuery
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true, errorMessage = null, nativeError = repository.nativeLoadError())
@@ -241,7 +241,9 @@ class DreamCueViewModel(
                     reminderEnabled = repository.reminderEnabled(),
                     syncEmail = syncCoordinator.currentEmail().ifBlank { uiState.syncEmail },
                 )
-                syncCoordinator.uploadAll(payload.currentMemos + payload.historyMemos)
+                if (uploadAfterLoad) {
+                    syncCoordinator.uploadAll(payload.currentMemos + payload.historyMemos)
+                }
             }.onFailure { throwable ->
                 uiState = uiState.copy(
                     isLoading = false,
@@ -404,7 +406,7 @@ class DreamCueViewModel(
     private fun startSync() {
         syncCoordinator.start(
             onStatus = ::updateSyncStatus,
-            onRemoteChange = ::refresh,
+            onRemoteChange = { refresh(uploadAfterLoad = true) },
         )
     }
 
@@ -430,7 +432,7 @@ class DreamCueViewModel(
                     uiState = uiState.copy(draft = "")
                 }
                 afterSuccess?.invoke()
-                refresh()
+                refresh(uploadAfterLoad = true)
             }.onFailure { throwable ->
                 uiState = uiState.copy(
                     isLoading = false,

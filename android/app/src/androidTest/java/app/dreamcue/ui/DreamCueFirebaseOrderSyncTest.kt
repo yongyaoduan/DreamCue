@@ -1,5 +1,6 @@
 package app.dreamcue.ui
 
+import android.Manifest
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.rule.GrantPermissionRule
 import androidx.test.uiautomator.UiDevice
 import app.dreamcue.BuildConfig
 import app.dreamcue.MainActivity
@@ -24,7 +26,11 @@ import java.net.URL
 import java.util.concurrent.TimeUnit
 
 class DreamCueFirebaseOrderSyncTest {
-    @get:Rule
+    @get:Rule(order = 0)
+    val notificationPermissionRule: GrantPermissionRule =
+        GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)
+
+    @get:Rule(order = 1)
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
@@ -159,8 +165,10 @@ class DreamCueFirebaseOrderSyncTest {
         device.waitForIdle()
         Thread.sleep(300)
         val safeName = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val file = File("/sdcard/Download/$safeName.png")
-        device.takeScreenshot(file)
+        val outputDir = argument("additionalTestOutputDir") ?: "/sdcard/Download"
+        val file = File(outputDir, safeName)
+        file.parentFile?.mkdirs()
+        check(device.takeScreenshot(file)) { "Screenshot capture failed." }
     }
 
     private fun requiredArgument(name: String): String {

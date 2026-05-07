@@ -134,7 +134,7 @@ struct ContentView: View {
             TodayView(
                 currentMemos: store.currentMemos,
                 reminderTime: store.reminderTimeText,
-                showAccountReminder: !startupAccountPromptSkipped && !store.isSyncActive,
+                showAccountReminder: !startupAccountPromptSkipped && !store.isSyncActive && !store.hasSavedSyncSession,
                 onNewCue: presentNewCue,
                 onOpen: openMemo,
                 onMove: store.moveCurrentMemo,

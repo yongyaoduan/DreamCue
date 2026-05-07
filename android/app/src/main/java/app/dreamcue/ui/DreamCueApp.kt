@@ -1737,57 +1737,65 @@ private fun ConnectedAccountPanel(
                     modifier = Modifier.padding(top = 5.dp),
                 )
             }
-            Row(
+            Column {
+                Text(
+                    text = "Last sync",
+                    color = Porcelain.copy(alpha = 0.68f),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "just now",
+                    color = Porcelain,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column {
-                    Text(
-                        text = "Last sync",
-                        color = Porcelain.copy(alpha = 0.68f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = "just now",
-                        color = Porcelain,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.End,
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = onResetSyncPassword,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
-                            border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
-                        ) {
-                            Text("Reset Password")
-                        }
-                        OutlinedButton(
-                            onClick = onSyncNow,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
-                            border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
-                        ) {
-                            Text("Sync Now")
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = onSignOutSync,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
-                        border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
-                    ) {
-                        Text("Sign Out")
-                    }
-                }
+                AccountActionButton(
+                    text = "Reset Password",
+                    tag = "accountAction.resetPassword",
+                    onClick = onResetSyncPassword,
+                )
+                AccountActionButton(
+                    text = "Sync Now",
+                    tag = "accountAction.syncNow",
+                    onClick = onSyncNow,
+                )
+                AccountActionButton(
+                    text = "Sign Out",
+                    tag = "accountAction.signOut",
+                    onClick = onSignOutSync,
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun AccountActionButton(
+    text: String,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(tag),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Porcelain),
+        border = BorderStroke(1.dp, Porcelain.copy(alpha = 0.32f)),
+    ) {
+        Text(
+            text = text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

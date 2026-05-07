@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -659,6 +660,50 @@ class DreamCueAppTest {
         assert(composeRule.onAllNodesWithText("users/{uid}/memos").fetchSemanticsNodes().isEmpty())
         assert(composeRule.onAllNodesWithText("Pending uploads").fetchSemanticsNodes().isEmpty())
         takeDeviceScreenshotIfRequested()
+    }
+
+    @Test
+    fun connectedAccountActionsUseFullWidthStack() {
+        composeRule.setContent {
+            DreamCueApp(
+                state = MainUiState(
+                    selectedScreen = MemoScreen.ACCOUNT,
+                    syncEmail = "qa@example.com",
+                    syncStatus = "Syncing as qa@example.com.",
+                ),
+                onDraftChange = {},
+                onAddMemo = {},
+                onSelectScreen = {},
+                onSearchQueryChange = {},
+                onRunSearch = {},
+                onClearMemo = {},
+                onDetailDraftChange = {},
+                onSaveReminderTime = { _, _ -> },
+                onOpenMemoDetail = {},
+                onDismissMemoDetail = {},
+                onReopenMemo = {},
+                onRequestDelete = {},
+                onDismissDeleteRequest = {},
+                onConfirmDelete = {},
+                onSyncEmailChange = {},
+                onSyncPasswordChange = {},
+                onSignInSync = {},
+                onCreateSyncAccount = {},
+                onSignOutSync = {},
+                onSyncNow = {},
+                onResetSyncPassword = {},
+                onReminderEnabledChange = {},
+            )
+        }
+
+        val resetBounds = composeRule.onNodeWithTag("accountAction.resetPassword").getUnclippedBoundsInRoot()
+        val syncBounds = composeRule.onNodeWithTag("accountAction.syncNow").getUnclippedBoundsInRoot()
+        val signOutBounds = composeRule.onNodeWithTag("accountAction.signOut").getUnclippedBoundsInRoot()
+
+        assert(resetBounds.left == syncBounds.left)
+        assert(resetBounds.right == syncBounds.right)
+        assert(resetBounds.left == signOutBounds.left)
+        assert(resetBounds.right == signOutBounds.right)
     }
 
     @Test
